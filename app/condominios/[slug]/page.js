@@ -1,7 +1,19 @@
+/**
+ * app/condominios/[slug]/page.js
+ * 
+ * Página de detalhe de condomínio (rota dinâmica: /condominios/[slug])
+ * - Exibe todas as informações de um condomínio específico
+ * - Seções: Resumo, Contas, Avisos, Manutenções, Assembleias
+ * - Permite adicionar/editar: contas, avisos, manutenções, assembleias
+ * - Validação de formulários com estados de erro
+ * - Salva mudanças em localStorage
+ * - Usa useReducer para gerenciar refresh de dados
+ */
+
 'use client'
 
 import Link from 'next/link'
-import { useReducer, useState } from 'react'
+import React, { useReducer, useState } from 'react'
 import { useParams } from 'next/navigation'
 import AdminShell from '@/components/admin-shell'
 import {
@@ -9,6 +21,13 @@ import {
   adicionarAvisoAoCondominio,
   adicionarContaAoCondominio,
   adicionarManutencaoAoCondominio,
+  editarManutencaoDoCondominio,
+  excluirManutencaoDoCondominio,
+  excluirContaDoCondominio,
+  excluirAvisoDoCondominio,
+  excluirAssembleiaDoCondominio,
+  registrarHistoricoManutencao,
+  atualizarCondominio,
   buscarCondominioPorSlug,
   calcularDiasParaData,
   descreverRecorrenciaConta,
@@ -25,6 +44,7 @@ export default function CondominioPage() {
   const [, forceRefresh] = useReducer((value) => value + 1, 0)
   const [secaoAtiva, setSecaoAtiva] = useState('resumo')
   const [painelAberto, setPainelAberto] = useState('')
+  const [manutencaoTipo, setManutencaoTipo] = useState('programadas')
   const [contaForm, setContaForm] = useState({
     titulo: '',
     categoria: '',
@@ -34,9 +54,15 @@ export default function CondominioPage() {
     recorrencia: 'nenhuma',
     diaVencimento: '15',
   })
+  const [historicoAberto, setHistoricoAberto] = useState(null)
+  const [historicoForm, setHistoricoForm] = useState({ data: '', status: 'Concluída', executor: '', observacao: '' })
+  const [manutencaoEditando, setManutencaoEditando] = useState(null)
+  const [manutencaoEditForm, setManutencaoEditForm] = useState({})
   const [manutencaoForm, setManutencaoForm] = useState({
     titulo: '',
+    tipo: 'Programada',
     frequencia: 'Mensal',
+    intervalMeses: '12',
     proximaData: '',
     responsavel: '',
     status: 'Programada',
@@ -119,12 +145,66 @@ export default function CondominioPage() {
     adicionarManutencaoAoCondominio(condominio.slug, manutencaoForm)
     setManutencaoForm({
       titulo: '',
+      tipo: 'Programada',
       frequencia: 'Mensal',
+      intervalMeses: '12',
       proximaData: '',
       responsavel: '',
       status: 'Programada',
     })
     recarregar()
+  }
+
+  function abrirEdicaoManutencao(item) {
+    setManutencaoEditando(item.id)
+    setManutencaoEditForm({
+      titulo: item.titulo,
+      tipo: item.tipo || 'Programada',
+      frequencia: item.frequencia,
+      intervalMeses: item.intervalMeses || '',
+      proximaData: item.proximaData || '',
+      responsavel: item.responsavel,
+      status: item.status,
+    })
+  }
+
+  function salvarEdicaoManutencao(event) {
+    event.preventDefault()
+    editarManutencaoDoCondominio(condominio.slug, manutencaoEditando, manutencaoEditForm)
+    setManutencaoEditando(null)
+    forceRefresh()
+  }
+
+  function registrarHistorico(event, manutencaoId) {
+    event.preventDefault()
+    registrarHistoricoManutencao(condominio.slug, manutencaoId, historicoForm)
+    setHistoricoAberto(null)
+    setHistoricoForm({ data: '', status: 'Concluída', executor: '', observacao: '' })
+    forceRefresh()
+  }
+
+  function excluirConta(id) {
+    if (!confirm('Excluir esta conta?')) return
+    excluirContaDoCondominio(condominio.slug, id)
+    forceRefresh()
+  }
+
+  function excluirAviso(id) {
+    if (!confirm('Excluir este aviso?')) return
+    excluirAvisoDoCondominio(condominio.slug, id)
+    forceRefresh()
+  }
+
+  function excluirAssembleia(id) {
+    if (!confirm('Excluir esta assembleia?')) return
+    excluirAssembleiaDoCondominio(condominio.slug, id)
+    forceRefresh()
+  }
+
+  function excluirManutencao(id) {
+    if (!confirm('Excluir esta manutenção?')) return
+    excluirManutencaoDoCondominio(condominio.slug, id)
+    forceRefresh()
   }
 
   function cadastrarAviso(event) {
@@ -154,14 +234,18 @@ export default function CondominioPage() {
   function abrirSecao(secao) {
     setSecaoAtiva(secao)
     setPainelAberto('')
+    if (secao === 'manutencoes') {
+      setManutencaoTipo('programadas')
+    }
   }
 
   const menuItens = [
-    { id: 'resumo', label: 'Resumo' },
-    { id: 'contas', label: 'Contas' },
-    { id: 'manutencoes', label: 'Manutencoes' },
-    { id: 'avisos', label: 'Avisos' },
-    { id: 'assembleias', label: 'Assembleias' },
+    { id: 'resumo', label: 'Resumo', helper: 'Visão geral do condomínio' },
+    { id: 'manutencoes', label: 'Manutenções', helper: 'Programadas e recorrentes' },
+    { id: 'contas', label: 'Contas', helper: 'Despesas e títulos' },
+    { id: 'avisos', label: 'Avisos', helper: 'Comunicados' },
+    { id: 'assembleias', label: 'Assembleias', helper: 'Atas e encontros' },
+    { id: 'lembretes', label: 'Lembretes', helper: 'O que não pode esquecer' },
   ]
 
   const contasNormalizadas = condominio.contas.map((conta) => normalizarConta(conta))
@@ -176,86 +260,184 @@ export default function CondominioPage() {
   const proximaAssembleia = [...(condominio.assembleias || [])]
     .filter((item) => item.data)
     .sort((a, b) => String(a.data).localeCompare(String(b.data)))[0]
-  const totalRecorrentes = contasNormalizadas.filter(
-    (item) => item.recorrencia === 'mensal-indeterminada'
-  ).length
+
+  // Calcular totalRecorrentes diretamente dos dados brutos para evitar diferenças de hidratação
+  const totalRecorrentes = React.useMemo(() => {
+    return condominio.contas.filter(
+      (conta) => conta.recorrencia === 'mensal-indeterminada'
+    ).length
+  }, [condominio.contas])
+
+  const manutencoesProgramadas = condominio.manutencoes.filter(
+    (item) => item.proximaData || item.status === 'Agendada' || item.status === 'Programada'
+  )
+  const manutencoesRecorrentes = condominio.manutencoes
+  const manutencoesRecorrentesPorFrequencia = manutencoesRecorrentes.reduce((map, item) => {
+    if (!map[item.frequencia]) {
+      map[item.frequencia] = []
+    }
+    map[item.frequencia].push(item)
+    return map
+  }, {})
 
   const sidebar = (
     <>
-      <div className="rounded-[1.25rem] border border-white/10 bg-white/6 p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-[var(--accent)]">
-          Condominio ativo
-        </p>
-        <h2 className="mt-3 text-2xl font-semibold tracking-tight">
-          {condominio.nome}
-        </h2>
+      <section className="rounded-[1.5rem] border border-white/10 bg-white/6 p-4 sm:p-5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-[var(--accent)]">Condomínio ativo</p>
+        <h2 className="mt-3 text-2xl font-semibold tracking-tight">{condominio.nome}</h2>
         <p className="mt-3 text-sm leading-6 text-white/68">
-          Menu exclusivo deste condominio para ver contas, manutencoes, avisos e assembleias.
+          Navegue rapidamente entre as áreas desse condomínio e veja os principais detalhes.
         </p>
-      </div>
+      </section>
 
-      <nav className="mt-4 grid gap-2">
-        <Link
-          href="/dashboard"
-          className="rounded-[1rem] bg-white/10 px-3.5 py-3 text-white/88 transition hover:bg-white/16"
+      <nav aria-label="Navegação do condomínio" className="mt-4 grid gap-2">
+        <button
+          type="button"
+          aria-current={secaoAtiva === 'resumo' ? 'page' : undefined}
+          onClick={() => abrirSecao('resumo')}
+          className={
+            secaoAtiva === 'resumo'
+              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
+              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
+          }
         >
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold">Inicio do sistema</p>
-              <p className="mt-1 text-xs text-white/62">Voltar ao painel principal</p>
+              <p className="text-sm font-semibold">Resumo</p>
+              <p className="mt-1 text-xs text-white/62 hidden sm:block">Visão geral do condomínio</p>
             </div>
-            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">
-              00
-            </span>
+            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">01</span>
           </div>
-        </Link>
+        </button>
 
-        <Link
-          href="/condominios"
-          className="rounded-[1rem] bg-white/10 px-3.5 py-3 text-white/88 transition hover:bg-white/16"
+        <button
+          type="button"
+          aria-current={secaoAtiva === 'contas' ? 'page' : undefined}
+          onClick={() => abrirSecao('contas')}
+          className={
+            secaoAtiva === 'contas'
+              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
+              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
+          }
         >
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold">Todos os condominios</p>
-              <p className="mt-1 text-xs text-white/62">Voltar para a carteira</p>
+              <p className="text-sm font-semibold">Contas</p>
+              <p className="mt-1 text-xs text-white/62 hidden sm:block">Despesas do condomínio</p>
             </div>
-            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">
-              01
-            </span>
+            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">02</span>
           </div>
-        </Link>
+        </button>
 
-        {menuItens.map((item, index) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => abrirSecao(item.id)}
-            className={
-              secaoAtiva === item.id
-                ? 'rounded-[1rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-3.5 py-3 text-left text-white transition'
-                : 'rounded-[1rem] bg-white/10 px-3.5 py-3 text-left text-white/88 transition hover:bg-white/16'
-            }
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold">{item.label}</p>
-                <p className="mt-1 text-xs text-white/62">Abrir secao</p>
-              </div>
-              <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">
-                {String(index + 2).padStart(2, '0')}
-              </span>
+        <button
+          type="button"
+          aria-current={secaoAtiva === 'manutencoes' ? 'page' : undefined}
+          onClick={() => abrirSecao('manutencoes')}
+          className={
+            secaoAtiva === 'manutencoes'
+              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
+              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
+          }
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Manutenções</p>
+              <p className="mt-1 text-xs text-white/62 hidden sm:block">Programadas e recorrentes</p>
             </div>
-          </button>
-        ))}
+            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">03</span>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          aria-current={secaoAtiva === 'avisos' ? 'page' : undefined}
+          onClick={() => abrirSecao('avisos')}
+          className={
+            secaoAtiva === 'avisos'
+              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
+              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
+          }
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Avisos</p>
+              <p className="mt-1 text-xs text-white/62 hidden sm:block">Comunicados</p>
+            </div>
+            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">04</span>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          aria-current={secaoAtiva === 'assembleias' ? 'page' : undefined}
+          onClick={() => abrirSecao('assembleias')}
+          className={
+            secaoAtiva === 'assembleias'
+              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
+              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
+          }
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Assembleias</p>
+              <p className="mt-1 text-xs text-white/62 hidden sm:block">Atas e reuniões</p>
+            </div>
+            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">05</span>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          aria-current={secaoAtiva === 'lembretes' ? 'page' : undefined}
+          onClick={() => abrirSecao('lembretes')}
+          className={
+            secaoAtiva === 'lembretes'
+              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
+              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
+          }
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Lembretes</p>
+              <p className="mt-1 text-xs text-white/62 hidden sm:block">Ações importantes</p>
+            </div>
+            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">06</span>
+          </div>
+        </button>
       </nav>
 
       <div className="mt-4 rounded-[1.25rem] border border-cyan-300/18 bg-[linear-gradient(135deg,rgba(34,211,238,0.18),rgba(168,85,247,0.16))] p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-cyan-200">
-          Dados rapidos
-        </p>
-        <p className="mt-3 text-sm text-white/82">Sindico: {condominio.sindico}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-cyan-200">Dados rápidos</p>
+        <p className="mt-3 text-sm text-white/82">Síndico: {condominio.sindico}</p>
         <p className="mt-2 text-sm text-white/82">Unidades: {condominio.unidades}</p>
         <p className="mt-2 text-sm text-white/82">Cidade: {condominio.cidade}</p>
+      </div>
+
+      <div className="mt-3 space-y-2">
+        <label className="block cursor-pointer rounded-[1.25rem] border border-white/10 bg-white/6 p-3 text-center text-xs font-semibold text-white/70 hover:bg-white/12 transition">
+          {condominio.foto ? (
+            <img src={condominio.foto} alt="Logo" className="mx-auto mb-2 h-16 w-16 rounded-full object-cover" />
+          ) : (
+            <span className="block mb-1 text-2xl">🏗️</span>
+          )}
+          {condominio.foto ? 'Trocar foto' : 'Adicionar foto/logo'}
+          <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (!file) return
+            const reader = new FileReader()
+            reader.onload = (ev) => {
+              atualizarCondominio(condominio.slug, (c) => ({ ...c, foto: ev.target.result }))
+              forceRefresh()
+            }
+            reader.readAsDataURL(file)
+          }} />
+        </label>
+        <Link
+          href={`/condominios/${condominio.slug}/relatorio`}
+          className="block rounded-[1.25rem] border border-white/10 bg-white/6 p-3 text-center text-xs font-semibold text-white/70 hover:bg-white/12 transition"
+        >
+          📄 Gerar relatório
+        </Link>
       </div>
     </>
   )
@@ -285,7 +467,7 @@ export default function CondominioPage() {
       sidebar={sidebar}
       headerActions={headerActions}
     >
-      <div className="space-y-6">
+      <div className="space-y-3">
         <section className="rounded-[1.75rem] border border-slate-200/70 bg-[linear-gradient(135deg,rgba(15,82,255,0.08),rgba(34,211,238,0.08),rgba(249,115,22,0.08))] p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -335,15 +517,15 @@ export default function CondominioPage() {
         </section>
 
         {secaoAtiva === 'resumo' ? (
-          <section id="resumo" className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <section id="resumo" className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <SummaryCard label="Sindico" value={condominio.sindico} />
               <SummaryCard label="Unidades" value={condominio.unidades} />
               <SummaryCard label="Contas recorrentes" value={totalRecorrentes} />
               <SummaryCard label="Assembleias" value={condominio.assembleias?.length || 0} />
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-3">
+            <div className="grid gap-3 xl:grid-cols-2">
               <InsightCard
                 title="Proxima conta"
                 description={
@@ -355,19 +537,6 @@ export default function CondominioPage() {
                   proximaConta
                     ? `${formatarData(proximaConta.proximoVencimento || proximaConta.vencimento)} · ${resumirUrgenciaConta(proximaConta).label}`
                     : 'Cadastre uma conta para acompanhar o financeiro.'
-                }
-              />
-              <InsightCard
-                title="Proxima manutencao"
-                description={
-                  proximaManutencao
-                    ? proximaManutencao.titulo
-                    : 'Nenhuma manutencao com data definida.'
-                }
-                meta={
-                  proximaManutencao
-                    ? `${formatarData(proximaManutencao.proximaData)} · ${proximaManutencao.responsavel}`
-                    : 'Defina as proximas rotinas operacionais.'
                 }
               />
               <InsightCard
@@ -384,6 +553,165 @@ export default function CondominioPage() {
                 }
               />
             </div>
+
+            <ContentPanel
+              title="Manutenções"
+              actionLabel="Nova manutenção"
+              actionOpen={painelAberto === 'manutencao'}
+              onActionToggle={() => setPainelAberto((a) => (a === 'manutencao' ? '' : 'manutencao'))}
+            >
+              {painelAberto === 'manutencao' ? (
+                <InlineFormWrap>
+                  <FormPanel title="Nova manutenção" onSubmit={cadastrarManutencao} compact>
+                    <Field label="Título">
+                      <input value={manutencaoForm.titulo} onChange={(e) => atualizarForm(setManutencaoForm, 'titulo', e.target.value)} className={inputClass} required />
+                    </Field>
+                    <Field label="Tipo">
+                      <select value={manutencaoForm.tipo} onChange={(e) => atualizarForm(setManutencaoForm, 'tipo', e.target.value)} className={inputClass}>
+                        <option value="Programada">Programada — se repete</option>
+                        <option value="Corretiva">Corretiva — ocorrência pontual</option>
+                      </select>
+                    </Field>
+                    {manutencaoForm.tipo === 'Programada' && (
+                      <>
+                        <Field label="Frequência">
+                          <select value={manutencaoForm.frequencia} onChange={(e) => atualizarForm(setManutencaoForm, 'frequencia', e.target.value)} className={inputClass}>
+                            {frequenciasManutencao.map((f) => <option key={f}>{f}</option>)}
+                          </select>
+                        </Field>
+                        <Field label="Intervalo em meses">
+                          <input type="number" min="1" value={manutencaoForm.intervalMeses} onChange={(e) => atualizarForm(setManutencaoForm, 'intervalMeses', e.target.value)} className={inputClass} />
+                        </Field>
+                      </>
+                    )}
+                    <Field label="Próxima data">
+                      <input type="date" value={manutencaoForm.proximaData} onChange={(e) => atualizarForm(setManutencaoForm, 'proximaData', e.target.value)} className={inputClass} />
+                    </Field>
+                    <Field label="Responsável">
+                      <input value={manutencaoForm.responsavel} onChange={(e) => atualizarForm(setManutencaoForm, 'responsavel', e.target.value)} className={inputClass} required />
+                    </Field>
+                    <Field label="Status">
+                      <select value={manutencaoForm.status} onChange={(e) => atualizarForm(setManutencaoForm, 'status', e.target.value)} className={inputClass}>
+                        <option>Programada</option>
+                        <option>Agendada</option>
+                        <option>Pendente</option>
+                        <option>Concluída</option>
+                        <option>Não realizada</option>
+                      </select>
+                    </Field>
+                    <SubmitButton label="Salvar manutenção" />
+                  </FormPanel>
+                </InlineFormWrap>
+              ) : null}
+              {condominio.manutencoes.length === 0 ? (
+                <EmptyState text="Nenhuma manutenção cadastrada." />
+              ) : (
+                condominio.manutencoes.map((item) => (
+                  <div key={item.id} className="rounded-2xl border border-[var(--line)] bg-[var(--soft)] p-4">
+                    {manutencaoEditando === item.id ? (
+                      <form onSubmit={salvarEdicaoManutencao} className="space-y-3">
+                        <Field label="Título">
+                          <input value={manutencaoEditForm.titulo} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, titulo: e.target.value }))} className={inputClass} required />
+                        </Field>
+                        <Field label="Tipo">
+                          <select value={manutencaoEditForm.tipo} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, tipo: e.target.value }))} className={inputClass}>
+                            <option value="Programada">Programada</option>
+                            <option value="Corretiva">Corretiva</option>
+                          </select>
+                        </Field>
+                        {manutencaoEditForm.tipo === 'Programada' && (
+                          <Field label="Intervalo em meses">
+                            <input type="number" min="1" value={manutencaoEditForm.intervalMeses} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, intervalMeses: e.target.value }))} className={inputClass} />
+                          </Field>
+                        )}
+                        <Field label="Próxima data">
+                          <input type="date" value={manutencaoEditForm.proximaData} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, proximaData: e.target.value }))} className={inputClass} />
+                        </Field>
+                        <Field label="Responsável">
+                          <input value={manutencaoEditForm.responsavel} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, responsavel: e.target.value }))} className={inputClass} />
+                        </Field>
+                        <Field label="Status">
+                          <select value={manutencaoEditForm.status} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, status: e.target.value }))} className={inputClass}>
+                            <option>Programada</option>
+                            <option>Agendada</option>
+                            <option>Pendente</option>
+                            <option>Concluída</option>
+                            <option>Não realizada</option>
+                          </select>
+                        </Field>
+                        <div className="flex gap-2">
+                          <SubmitButton label="Salvar" />
+                          <button type="button" onClick={() => setManutencaoEditando(null)} className="w-full rounded-full border border-slate-300 bg-white py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">Cancelar</button>
+                        </div>
+                      </form>
+                    ) : (
+                      <>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-medium text-[var(--ink)]">{item.titulo}</p>
+                            <p className="text-xs text-[var(--muted)] mt-0.5">
+                              {item.tipo === 'Corretiva' ? 'Corretiva' : `Programada${item.intervalMeses ? ` · a cada ${item.intervalMeses} mês(es)` : ''}`}
+                              {item.frequencia ? ` · ${item.frequencia}` : ''}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <StatusBadge status={item.status} />
+                            <button type="button" onClick={() => abrirEdicaoManutencao(item)} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[var(--accent-strong)] ring-1 ring-slate-200 transition hover:bg-slate-50">Editar</button>
+                            <button type="button" onClick={() => { setHistoricoAberto(historicoAberto === item.id ? null : item.id); setHistoricoForm({ data: '', status: 'Concluída', executor: '', observacao: '' }) }} className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200 transition hover:bg-emerald-100">Histórico</button>
+                            <button type="button" onClick={() => excluirManutencao(item.id)} className="text-xs font-semibold text-red-400 hover:text-red-600">Excluir</button>
+                          </div>
+                        </div>
+                        <div className="mt-2 text-sm text-[var(--muted)]">
+                          {item.proximaData ? `Próxima: ${formatarData(item.proximaData)}` : 'Sem data definida'}
+                          {item.responsavel ? ` · ${item.responsavel}` : ''}
+                        </div>
+                        {historicoAberto === item.id && (
+                          <div className="mt-3 rounded-2xl border border-[var(--line)] bg-white p-4 space-y-3">
+                            <p className="text-sm font-semibold text-[var(--ink)]">Registrar execução</p>
+                            <form onSubmit={(e) => registrarHistorico(e, item.id)} className="space-y-2">
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                <Field label="Data">
+                                  <input type="date" value={historicoForm.data} onChange={(e) => setHistoricoForm((f) => ({ ...f, data: e.target.value }))} className={inputClass} required />
+                                </Field>
+                                <Field label="Status">
+                                  <select value={historicoForm.status} onChange={(e) => setHistoricoForm((f) => ({ ...f, status: e.target.value }))} className={inputClass}>
+                                    <option>Concluída</option>
+                                    <option>Não realizada</option>
+                                    <option>Parcial</option>
+                                  </select>
+                                </Field>
+                              </div>
+                              <Field label="Executor">
+                                <input value={historicoForm.executor} onChange={(e) => setHistoricoForm((f) => ({ ...f, executor: e.target.value }))} className={inputClass} placeholder="Nome do técnico ou empresa" />
+                              </Field>
+                              <Field label="Observação">
+                                <input value={historicoForm.observacao} onChange={(e) => setHistoricoForm((f) => ({ ...f, observacao: e.target.value }))} className={inputClass} placeholder="Opcional" />
+                              </Field>
+                              <SubmitButton label="Salvar registro" />
+                            </form>
+                            {(item.historico || []).length > 0 && (
+                              <div className="mt-3 space-y-2">
+                                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Registros anteriores</p>
+                                {(item.historico || []).map((h) => (
+                                  <div key={h.id} className="rounded-xl bg-slate-50 px-3 py-2 text-sm">
+                                    <div className="flex items-center justify-between">
+                                      <span className="font-medium text-[var(--ink)]">{formatarData(h.data)}</span>
+                                      <StatusBadge status={h.status} />
+                                    </div>
+                                    {h.executor && <p className="mt-1 text-[var(--muted)]">Executor: {h.executor}</p>}
+                                    {h.observacao && <p className="mt-0.5 text-[var(--muted)]">{h.observacao}</p>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ))
+              )}
+            </ContentPanel>
           </section>
         ) : null}
 
@@ -473,6 +801,7 @@ export default function CondominioPage() {
                     <p className="text-sm text-[var(--muted)]">
                       {descreverRecorrenciaConta(conta)}
                     </p>
+                    <button type="button" onClick={() => excluirConta(conta.id)} className="ml-auto text-xs font-semibold text-red-400 hover:text-red-600">Excluir</button>
                   </div>
                 </div>
                 ))
@@ -491,23 +820,59 @@ export default function CondominioPage() {
               setPainelAberto((atual) => (atual === 'manutencao' ? '' : 'manutencao'))
             }
           >
+            <div className="mb-5 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => setManutencaoTipo('programadas')}
+                className={
+                  manutencaoTipo === 'programadas'
+                    ? 'rounded-full bg-[var(--panel-strong)] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110'
+                    : 'rounded-full bg-white px-4 py-2 text-sm font-semibold text-[var(--panel-strong)] ring-1 ring-slate-200 transition hover:bg-[var(--soft)]'
+                }
+              >
+                Programadas
+              </button>
+              <button
+                type="button"
+                onClick={() => setManutencaoTipo('recorrentes')}
+                className={
+                  manutencaoTipo === 'recorrentes'
+                    ? 'rounded-full bg-[var(--panel-strong)] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110'
+                    : 'rounded-full bg-white px-4 py-2 text-sm font-semibold text-[var(--panel-strong)] ring-1 ring-slate-200 transition hover:bg-[var(--soft)]'
+                }
+              >
+                Recorrentes
+              </button>
+            </div>
+
             {painelAberto === 'manutencao' ? (
               <InlineFormWrap>
-                <FormPanel title="Nova manutencao" onSubmit={cadastrarManutencao} compact>
-                  <Field label="Titulo">
+                <FormPanel title="Nova manutenção" onSubmit={cadastrarManutencao} compact>
+                  <Field label="Título">
                     <input value={manutencaoForm.titulo} onChange={(e) => atualizarForm(setManutencaoForm, 'titulo', e.target.value)} className={inputClass} required />
                   </Field>
-                  <Field label="Frequencia">
-                    <select value={manutencaoForm.frequencia} onChange={(e) => atualizarForm(setManutencaoForm, 'frequencia', e.target.value)} className={inputClass}>
-                      {frequenciasManutencao.map((frequencia) => (
-                        <option key={frequencia}>{frequencia}</option>
-                      ))}
+                  <Field label="Tipo">
+                    <select value={manutencaoForm.tipo} onChange={(e) => atualizarForm(setManutencaoForm, 'tipo', e.target.value)} className={inputClass}>
+                      <option value="Programada">Programada — se repete (ex: gerador todo mês)</option>
+                      <option value="Corretiva">Corretiva — ocorrência pontual (ex: cano estourou)</option>
                     </select>
                   </Field>
-                  <Field label="Proxima data">
+                  {manutencaoForm.tipo === 'Programada' && (
+                    <>
+                      <Field label="Frequência">
+                        <select value={manutencaoForm.frequencia} onChange={(e) => atualizarForm(setManutencaoForm, 'frequencia', e.target.value)} className={inputClass}>
+                          {frequenciasManutencao.map((f) => <option key={f}>{f}</option>)}
+                        </select>
+                      </Field>
+                      <Field label="Intervalo em meses (ex: 12 para anual)">
+                        <input type="number" min="1" value={manutencaoForm.intervalMeses} onChange={(e) => atualizarForm(setManutencaoForm, 'intervalMeses', e.target.value)} className={inputClass} />
+                      </Field>
+                    </>
+                  )}
+                  <Field label="Próxima data">
                     <input type="date" value={manutencaoForm.proximaData} onChange={(e) => atualizarForm(setManutencaoForm, 'proximaData', e.target.value)} className={inputClass} />
                   </Field>
-                  <Field label="Responsavel">
+                  <Field label="Responsável">
                     <input value={manutencaoForm.responsavel} onChange={(e) => atualizarForm(setManutencaoForm, 'responsavel', e.target.value)} className={inputClass} required />
                   </Field>
                   <Field label="Status">
@@ -515,51 +880,136 @@ export default function CondominioPage() {
                       <option>Programada</option>
                       <option>Agendada</option>
                       <option>Pendente</option>
-                      <option>Concluida</option>
+                      <option>Concluída</option>
+                      <option>Não realizada</option>
                     </select>
                   </Field>
-                  <SubmitButton label="Salvar manutencao" />
+                  <SubmitButton label="Salvar manutenção" />
                 </FormPanel>
               </InlineFormWrap>
             ) : null}
-            <div className="space-y-5">
-              {frequenciasManutencao.map((frequencia) => (
-                <div key={frequencia} className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--soft)] p-5">
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                    <h3 className="text-lg font-semibold text-[var(--ink)]">{frequencia}</h3>
-                    <span className="text-sm text-[var(--muted)]">
-                      {manutencoesPorFrequencia[frequencia].length} item(ns)
-                    </span>
-                  </div>
 
-                  <div className="mt-4 space-y-3">
-                    {manutencoesPorFrequencia[frequencia].length === 0 ? (
-                      <p className="text-sm text-[var(--muted)]">Nenhuma manutencao nessa frequencia.</p>
-                    ) : (
-                      manutencoesPorFrequencia[frequencia].map((item) => (
-                        <div
-                          key={item.id}
-                          className="rounded-2xl bg-white px-4 py-4 ring-1 ring-black/5"
-                        >
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <p className="font-medium text-[var(--ink)]">{item.titulo}</p>
-                            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent-strong)]">
-                              {item.status}
-                            </span>
+            {manutencaoTipo === 'programadas' ? (
+              manutencoesProgramadas.length === 0 ? (
+                <EmptyState text="Nenhuma manutenção programada encontrada para este condomínio." />
+              ) : (
+                <div className="space-y-3">
+                  {manutencoesProgramadas.map((item) => (
+                    <div key={item.id} className="rounded-2xl border border-[var(--line)] bg-[var(--soft)] p-4">
+                      {manutencaoEditando === item.id ? (
+                        <form onSubmit={salvarEdicaoManutencao} className="space-y-3">
+                          <Field label="Título">
+                            <input value={manutencaoEditForm.titulo} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, titulo: e.target.value }))} className={inputClass} required />
+                          </Field>
+                          <Field label="Tipo">
+                            <select value={manutencaoEditForm.tipo} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, tipo: e.target.value }))} className={inputClass}>
+                              <option value="Programada">Programada</option>
+                              <option value="Corretiva">Corretiva</option>
+                            </select>
+                          </Field>
+                          {manutencaoEditForm.tipo === 'Programada' && (
+                            <Field label="Intervalo em meses">
+                              <input type="number" min="1" value={manutencaoEditForm.intervalMeses} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, intervalMeses: e.target.value }))} className={inputClass} />
+                            </Field>
+                          )}
+                          <Field label="Próxima data">
+                            <input type="date" value={manutencaoEditForm.proximaData} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, proximaData: e.target.value }))} className={inputClass} />
+                          </Field>
+                          <Field label="Responsável">
+                            <input value={manutencaoEditForm.responsavel} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, responsavel: e.target.value }))} className={inputClass} />
+                          </Field>
+                          <Field label="Status">
+                            <select value={manutencaoEditForm.status} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, status: e.target.value }))} className={inputClass}>
+                              <option>Programada</option>
+                              <option>Agendada</option>
+                              <option>Pendente</option>
+                              <option>Concluída</option>
+                              <option>Não realizada</option>
+                            </select>
+                          </Field>
+                          <div className="flex gap-2">
+                            <SubmitButton label="Salvar" />
+                            <button type="button" onClick={() => setManutencaoEditando(null)} className="w-full rounded-full border border-slate-300 bg-white py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">Cancelar</button>
                           </div>
-                          <p className="mt-2 text-sm text-[var(--muted)]">
-                            Responsavel: {item.responsavel}
-                          </p>
-                          <p className="mt-1 text-sm text-[var(--muted)]">
-                            Proxima data: {formatarData(item.proximaData)}
-                          </p>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                        </form>
+                      ) : (
+                        <>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-medium text-[var(--ink)]">{item.titulo}</p>
+                              <p className="text-xs text-[var(--muted)] mt-0.5">
+                                {item.tipo === 'Corretiva' ? 'Corretiva' : `Programada${item.intervalMeses ? ` · a cada ${item.intervalMeses} mês(es)` : ''}`}
+                                {item.frequencia ? ` · ${item.frequencia}` : ''}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <StatusBadge status={item.status} />
+                              <button type="button" onClick={() => abrirEdicaoManutencao(item)} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[var(--accent-strong)] ring-1 ring-slate-200 transition hover:bg-slate-50">Editar</button>
+                            </div>
+                          </div>
+                          <div className="mt-2 text-sm text-[var(--muted)]">
+                            {item.proximaData ? `Próxima: ${formatarData(item.proximaData)}` : 'Sem data definida'}
+                            {item.responsavel ? ` · ${item.responsavel}` : ''}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
                 </div>
+              )
+            ) : (
+              <div className="space-y-5">
+                {Object.entries(manutencoesRecorrentesPorFrequencia).map(([frequencia, itens]) => (
+                  <div key={frequencia} className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--soft)] p-5">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold text-[var(--ink)]">{frequencia}</h3>
+                      <span className="text-sm text-[var(--muted)]">{itens.length} item(ns)</span>
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      {itens.map((item) => (
+                        <div key={item.id} className="rounded-2xl bg-white px-4 py-4 ring-1 ring-black/5">
+                          {manutencaoEditando === item.id ? (
+                            <form onSubmit={salvarEdicaoManutencao} className="space-y-3">
+                              <Field label="Título">
+                                <input value={manutencaoEditForm.titulo} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, titulo: e.target.value }))} className={inputClass} required />
+                              </Field>
+                              <Field label="Status">
+                                <select value={manutencaoEditForm.status} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, status: e.target.value }))} className={inputClass}>
+                                  <option>Programada</option>
+                                  <option>Agendada</option>
+                                  <option>Pendente</option>
+                                  <option>Concluída</option>
+                                  <option>Não realizada</option>
+                                </select>
+                              </Field>
+                              <Field label="Próxima data">
+                                <input type="date" value={manutencaoEditForm.proximaData} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, proximaData: e.target.value }))} className={inputClass} />
+                              </Field>
+                              <div className="flex gap-2">
+                                <SubmitButton label="Salvar" />
+                                <button type="button" onClick={() => setManutencaoEditando(null)} className="w-full rounded-full border border-slate-300 bg-white py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">Cancelar</button>
+                              </div>
+                            </form>
+                          ) : (
+                            <>
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="font-medium text-[var(--ink)]">{item.titulo}</p>
+                                <div className="flex items-center gap-2">
+                                  <StatusBadge status={item.status} />
+                                  <button type="button" onClick={() => abrirEdicaoManutencao(item)} className="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-[var(--accent-strong)] ring-1 ring-slate-200 transition hover:bg-slate-100">Editar</button>
+                                </div>
+                              </div>
+                              <p className="mt-1 text-sm text-[var(--muted)]">Responsável: {item.responsavel}</p>
+                              <p className="mt-1 text-sm text-[var(--muted)]">{item.proximaData ? `Próxima: ${formatarData(item.proximaData)}` : 'Sem data'}</p>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 ))}
-            </div>
+              </div>
+            )}
           </ContentPanel>
         </section>
         ) : null}
@@ -598,7 +1048,10 @@ export default function CondominioPage() {
                 >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <p className="font-medium text-[var(--ink)]">{aviso.titulo}</p>
-                    <p className="text-sm text-[var(--muted)]">{formatarData(aviso.data)}</p>
+                    <div className="flex items-center gap-3">
+                      <p className="text-sm text-[var(--muted)]">{formatarData(aviso.data)}</p>
+                      <button type="button" onClick={() => excluirAviso(aviso.id)} className="text-xs font-semibold text-red-400 hover:text-red-600">Excluir</button>
+                    </div>
                   </div>
                   <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{aviso.descricao}</p>
                 </div>
@@ -648,9 +1101,12 @@ export default function CondominioPage() {
                 >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <p className="font-medium text-[var(--ink)]">{assembleia.titulo}</p>
-                    <p className="text-sm text-[var(--muted)]">
-                      {formatarData(assembleia.data)} {assembleia.horario ? `| ${assembleia.horario}` : ''}
-                    </p>
+                    <div className="flex items-center gap-3">
+                      <p className="text-sm text-[var(--muted)]">
+                        {formatarData(assembleia.data)} {assembleia.horario ? `| ${assembleia.horario}` : ''}
+                      </p>
+                      <button type="button" onClick={() => excluirAssembleia(assembleia.id)} className="text-xs font-semibold text-red-400 hover:text-red-600">Excluir</button>
+                    </div>
                   </div>
                   <p className="mt-2 text-sm text-[var(--muted)]">Local: {assembleia.local}</p>
                   <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{assembleia.pauta}</p>
@@ -658,7 +1114,26 @@ export default function CondominioPage() {
               ))
             ) : (
               <EmptyState text="Nenhuma assembleia cadastrada para este condominio." />
-              )}
+            )}
+          </ContentPanel>
+        </section>
+        ) : null}
+
+        {secaoAtiva === 'lembretes' ? (
+        <section id="lembretes">
+          <ContentPanel title="Lembretes do condomínio">
+            {lembretes.length === 0 ? (
+              <EmptyState text="Nenhum lembrete ativo no momento. Cadastre contas, manutenções ou assembleias para ver avisos aqui." />
+            ) : (
+              <div className="space-y-4">
+                {lembretes.map((item) => (
+                  <div key={item.id} className="rounded-2xl border border-[var(--line)] bg-[var(--soft)] p-5">
+                    <p className="text-lg font-semibold text-[var(--ink)]">{item.titulo}</p>
+                    <p className="mt-2 text-sm text-[var(--muted)]">{item.detalhe}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </ContentPanel>
         </section>
         ) : null}
@@ -779,6 +1254,18 @@ function EmptyState({ text }) {
     <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--soft)] px-4 py-5 text-sm text-[var(--muted)]">
       {text}
     </div>
+  )
+}
+
+function StatusBadge({ status }) {
+  const cls =
+    status === 'Concluída' ? 'bg-emerald-100 text-emerald-700'
+    : status === 'Não realizada' ? 'bg-red-100 text-red-700'
+    : status === 'Agendada' ? 'bg-blue-100 text-blue-700'
+    : status === 'Programada' ? 'bg-cyan-100 text-cyan-700'
+    : 'bg-slate-100 text-slate-600'
+  return (
+    <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${cls}`}>{status}</span>
   )
 }
 

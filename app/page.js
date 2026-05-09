@@ -1,3 +1,14 @@
+/**
+ * app/page.js
+ * 
+ * Página de login (rota raiz: /)
+ * - Componente client-side com formulário de autenticação
+ * - Verifica sessão existente e redireciona para dashboard se autenticado
+ * - Integra com Supabase Auth para sign-in com email/senha
+ * - Exibe erros de validação e conexão
+ * - Estados: carregando, erro, redirecionamento
+ */
+
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -61,8 +72,8 @@ export default function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-100 px-4">
       <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-md">
-        <h1 className="mb-2 text-2xl font-bold text-gray-800">
-          Gestao de Condominios
+        <h1 className="mb-2 text-2xl font-bold text-slate-900">
+          ES Gestão Condominial
         </h1>
         <p className="mb-6 text-gray-500">Faca login para acessar o sistema</p>
 

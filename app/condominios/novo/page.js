@@ -5,146 +5,266 @@ import Link from 'next/link'
 import AdminShell from '@/components/admin-shell'
 import { adicionarCondominio } from '@/lib/condominios'
 
+const inputClass = 'w-full rounded-2xl border border-[var(--line)] bg-[var(--soft)] px-4 py-3 text-sm outline-none transition focus:border-[var(--accent)]'
+
+function Field({ label, children }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-sm font-medium text-[var(--ink)]">{label}</span>
+      {children}
+    </label>
+  )
+}
+
+function formatarCNPJ(valor) {
+  return valor
+    .replace(/\D/g, '')
+    .slice(0, 14)
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2')
+}
+
+function formatarCEP(valor) {
+  return valor.replace(/\D/g, '').slice(0, 8).replace(/^(\d{5})(\d)/, '$1-$2')
+}
+
 export default function NovoCondominioPage() {
   const [form, setForm] = useState({
     nome: '',
-    cidade: '',
+    cnpj: '',
     sindico: '',
     unidades: '',
+    cep: '',
+    logradouro: '',
+    numero: '',
+    complemento: '',
+    bairro: '',
+    cidade: '',
+    estado: '',
   })
   const [salvando, setSalvando] = useState(false)
+  const [buscandoCep, setBuscandoCep] = useState(false)
+  const [erroCep, setErroCep] = useState('')
   const [erro, setErro] = useState('')
 
-  function atualizarCampo(evento) {
-    const { name, value } = evento.target
-    setForm((atual) => ({ ...atual, [name]: value }))
+  function atualizar(campo, valor) {
+    setForm((f) => ({ ...f, [campo]: valor }))
   }
 
-  function validar() {
-    if (!form.nome || !form.cidade || !form.sindico || !form.unidades) {
-      return 'Preencha nome, cidade, sindico e quantidade de unidades.'
+  async function buscarCep(cepRaw) {
+    const cep = cepRaw.replace(/\D/g, '')
+    if (cep.length !== 8) return
+    setBuscandoCep(true)
+    setErroCep('')
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`)
+      const data = await res.json()
+      if (data.erro) {
+        setErroCep('CEP não encontrado.')
+      } else {
+        setForm((f) => ({
+          ...f,
+          logradouro: data.logradouro || '',
+          bairro: data.bairro || '',
+          cidade: data.localidade || '',
+          estado: data.uf || '',
+        }))
+      }
+    } catch {
+      setErroCep('Erro ao buscar CEP. Verifique sua conexão.')
     }
-
-    return ''
+    setBuscandoCep(false)
   }
 
-  function cadastrar(evento) {
-    evento.preventDefault()
-
-    const mensagemErro = validar()
-    if (mensagemErro) {
-      setErro(mensagemErro)
+  function cadastrar(e) {
+    e.preventDefault()
+    if (!form.nome || !form.sindico || !form.unidades) {
+      setErro('Preencha pelo menos nome, síndico e unidades.')
       return
     }
-
     setSalvando(true)
     setErro('')
-
     const novo = adicionarCondominio(form)
     window.location.href = `/condominios/${novo.slug}`
   }
 
   return (
     <AdminShell
-      title="Cadastrar novo condominio"
-      subtitle="Registre um novo cliente e ja deixe pronta a estrutura inicial de manutencoes, avisos e contas para comecar a operacao."
+      title="Cadastrar novo condomínio"
+      subtitle="Registre um novo cliente com todos os dados cadastrais."
       currentPath="/condominios/novo"
     >
-      <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-        <form
-          onSubmit={cadastrar}
-          className="rounded-[1.75rem] border border-black/5 bg-white/85 p-6 shadow-[0_18px_50px_rgba(71,47,24,0.08)]"
-        >
-          <h2 className="text-xl font-semibold text-[var(--ink)]">Dados do condominio</h2>
-          <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-            Esta primeira versao ja cria a base do condominio e uma lista inicial de manutencoes por frequencia.
-          </p>
+      <form onSubmit={cadastrar} className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="space-y-3">
 
-          <div className="mt-6 grid gap-4">
-            <Field label="Nome do condominio">
-              <input
-                name="nome"
-                value={form.nome}
-                onChange={atualizarCampo}
-                className="w-full rounded-2xl border border-[var(--line)] bg-[var(--soft)] px-4 py-3 outline-none transition focus:border-[var(--accent)]"
-                placeholder="Ex.: Condominio Reserva das Flores"
-              />
-            </Field>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Cidade">
+          {/* Dados principais */}
+          <div className="rounded-[1.75rem] border border-black/5 bg-white/85 p-5 shadow-[0_18px_50px_rgba(71,47,24,0.08)]">
+            <h2 className="text-base font-semibold text-[var(--ink)]">Dados principais</h2>
+            <div className="mt-4 grid gap-3">
+              <Field label="Nome do condomínio">
                 <input
-                  name="cidade"
-                  value={form.cidade}
-                  onChange={atualizarCampo}
-                  className="w-full rounded-2xl border border-[var(--line)] bg-[var(--soft)] px-4 py-3 outline-none transition focus:border-[var(--accent)]"
-                  placeholder="Ex.: Fortaleza"
+                  value={form.nome}
+                  onChange={(e) => atualizar('nome', e.target.value)}
+                  className={inputClass}
+                  placeholder="Ex.: Condomínio Reserva das Flores"
+                  required
                 />
               </Field>
 
-              <Field label="Unidades">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="CNPJ">
+                  <input
+                    value={form.cnpj}
+                    onChange={(e) => atualizar('cnpj', formatarCNPJ(e.target.value))}
+                    className={inputClass}
+                    placeholder="00.000.000/0000-00"
+                    maxLength={18}
+                  />
+                </Field>
+                <Field label="Unidades">
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.unidades}
+                    onChange={(e) => atualizar('unidades', e.target.value)}
+                    className={inputClass}
+                    placeholder="Ex.: 96"
+                    required
+                  />
+                </Field>
+              </div>
+
+              <Field label="Síndico responsável">
                 <input
-                  type="number"
-                  min="1"
-                  name="unidades"
-                  value={form.unidades}
-                  onChange={atualizarCampo}
-                  className="w-full rounded-2xl border border-[var(--line)] bg-[var(--soft)] px-4 py-3 outline-none transition focus:border-[var(--accent)]"
-                  placeholder="Ex.: 96"
+                  value={form.sindico}
+                  onChange={(e) => atualizar('sindico', e.target.value)}
+                  className={inputClass}
+                  placeholder="Ex.: Ana Bezerra"
+                  required
                 />
               </Field>
             </div>
-
-            <Field label="Sindico responsavel">
-              <input
-                name="sindico"
-                value={form.sindico}
-                onChange={atualizarCampo}
-                className="w-full rounded-2xl border border-[var(--line)] bg-[var(--soft)] px-4 py-3 outline-none transition focus:border-[var(--accent)]"
-                placeholder="Ex.: Ana Bezerra"
-              />
-            </Field>
           </div>
 
-          {erro ? (
-            <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">{erro}</p>
-          ) : null}
+          {/* Endereço */}
+          <div className="rounded-[1.75rem] border border-black/5 bg-white/85 p-5 shadow-[0_18px_50px_rgba(71,47,24,0.08)]">
+            <h2 className="text-base font-semibold text-[var(--ink)]">Endereço</h2>
+            <div className="mt-4 grid gap-3">
 
-          <div className="mt-6 flex flex-wrap gap-3">
+              <Field label="CEP">
+                <div className="flex gap-2">
+                  <input
+                    value={form.cep}
+                    onChange={(e) => {
+                      const v = formatarCEP(e.target.value)
+                      atualizar('cep', v)
+                      if (v.replace(/\D/g, '').length === 8) buscarCep(v)
+                    }}
+                    className={inputClass}
+                    placeholder="00000-000"
+                    maxLength={9}
+                  />
+                  {buscandoCep && (
+                    <span className="flex items-center text-xs text-[var(--muted)] whitespace-nowrap">Buscando...</span>
+                  )}
+                </div>
+                {erroCep && <p className="mt-1 text-xs text-red-500">{erroCep}</p>}
+              </Field>
+
+              <Field label="Logradouro">
+                <input
+                  value={form.logradouro}
+                  onChange={(e) => atualizar('logradouro', e.target.value)}
+                  className={inputClass}
+                  placeholder="Rua, Avenida..."
+                />
+              </Field>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Número">
+                  <input
+                    value={form.numero}
+                    onChange={(e) => atualizar('numero', e.target.value)}
+                    className={inputClass}
+                    placeholder="Ex.: 123"
+                  />
+                </Field>
+                <Field label="Complemento">
+                  <input
+                    value={form.complemento}
+                    onChange={(e) => atualizar('complemento', e.target.value)}
+                    className={inputClass}
+                    placeholder="Apto, Bloco..."
+                  />
+                </Field>
+              </div>
+
+              <Field label="Bairro">
+                <input
+                  value={form.bairro}
+                  onChange={(e) => atualizar('bairro', e.target.value)}
+                  className={inputClass}
+                  placeholder="Ex.: Centro"
+                />
+              </Field>
+
+              <div className="grid gap-3 sm:grid-cols-[1fr_80px]">
+                <Field label="Cidade">
+                  <input
+                    value={form.cidade}
+                    onChange={(e) => atualizar('cidade', e.target.value)}
+                    className={inputClass}
+                    placeholder="Ex.: Fortaleza"
+                  />
+                </Field>
+                <Field label="UF">
+                  <input
+                    value={form.estado}
+                    onChange={(e) => atualizar('estado', e.target.value.toUpperCase().slice(0, 2))}
+                    className={inputClass}
+                    placeholder="CE"
+                    maxLength={2}
+                  />
+                </Field>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Coluna direita */}
+        <div className="space-y-3">
+          <div className="rounded-[1.75rem] border border-black/5 bg-[var(--ink)] p-5 text-white shadow-[0_18px_50px_rgba(71,47,24,0.1)]">
+            <h2 className="text-base font-semibold">O que já nasce pronto</h2>
+            <ul className="mt-4 space-y-3 text-sm leading-6 text-white/70">
+              <li>• Condomínio entra na carteira e aparece no dashboard</li>
+              <li>• Página individual com contas, avisos e manutenções</li>
+              <li>• Manutenções criadas por frequência: diária, mensal, trimestral, semestral e anual</li>
+              <li>• CEP preenchido automaticamente via API dos Correios</li>
+            </ul>
+          </div>
+
+          <div className="rounded-[1.75rem] border border-black/5 bg-white/85 p-5 shadow-[0_18px_50px_rgba(71,47,24,0.08)]">
+            {erro && (
+              <p className="mb-3 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-600">{erro}</p>
+            )}
             <button
               type="submit"
               disabled={salvando}
-              className="rounded-full bg-[var(--ink)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-full bg-[var(--ink)] px-5 py-3 text-sm font-semibold text-white transition hover:bg-black disabled:opacity-50"
             >
-              {salvando ? 'Salvando...' : 'Criar condominio'}
+              {salvando ? 'Salvando...' : 'Criar condomínio'}
             </button>
             <Link
-              href="/dashboard"
-              className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[var(--ink)] ring-1 ring-black/10 transition hover:bg-[var(--soft)]"
+              href="/condominios"
+              className="mt-3 block w-full rounded-full bg-white px-5 py-3 text-center text-sm font-semibold text-[var(--ink)] ring-1 ring-black/10 transition hover:bg-[var(--soft)]"
             >
-              Voltar ao dashboard
+              Cancelar
             </Link>
           </div>
-        </form>
-
-        <section className="rounded-[1.75rem] border border-black/5 bg-[var(--ink)] p-6 text-white shadow-[0_18px_50px_rgba(71,47,24,0.1)]">
-          <h2 className="text-xl font-semibold">O que ja nasce pronto</h2>
-          <div className="mt-5 space-y-4 text-sm leading-6 text-white/75">
-            <p>O condominio entra na sua carteira de administracao e aparece no dashboard inicial.</p>
-            <p>A pagina individual do condominio fica pronta com visao de contas, avisos e manutencoes.</p>
-            <p>As manutencoes baseadas em rotina sao criadas nas frequencias diaria, mensal, trimestral, semestral e anual.</p>
-          </div>
-        </section>
-      </section>
+        </div>
+      </form>
     </AdminShell>
-  )
-}
-
-function Field({ label, children }) {
-  return (
-    <label className="block">
-      <span className="mb-2 block text-sm font-medium text-[var(--ink)]">{label}</span>
-      {children}
-    </label>
   )
 }

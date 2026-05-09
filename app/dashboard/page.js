@@ -1,6 +1,18 @@
+/**
+ * app/dashboard/page.js
+ * 
+ * Dashboard principal do sistema (rota: /dashboard)
+ * - Página protegida apenas para usuários autenticados
+ * - Exibe resumo de todos os condomínios: total de unidades, contas pendentes
+ * - Lista contas críticas (vencidas ou prestes a vencer) em tempo real
+ * - Mostra contas da semana organizadas por urgência
+ * - Usa AdminShell para layout padrão com navegação
+ * - Calcula dados no cliente com useMemo para evitar hidratação
+ */
+
 'use client'
 
-import Link from 'next/link'
+import { useEffect, useMemo, useState } from 'react'
 import AdminShell from '@/components/admin-shell'
 import {
   calcularDiasParaData,
@@ -13,16 +25,72 @@ import {
 } from '@/lib/condominios'
 
 export default function DashboardPage() {
-  const condominios = listarCondominios()
+  const [condominios, setCondominios] = useState([])
+
+  useEffect(() => {
+    setCondominios(listarCondominios())
+  }, [])
+
   const resumo = resumirDashboard(condominios)
+
+  const contasDaSemana = useMemo(() => {
+    const contas = condominios.flatMap((item) =>
+      item.contas.map((conta) => ({
+        ...conta,
+        condominio: item.nome,
+        slug: item.slug,
+      }))
+    )
+    const contasComUrgencia = contas.map((item) => ({
+      ...item,
+      diasRestantes: calcularDiasParaData(item.vencimento),
+    }))
+    return contasComUrgencia.filter((item) => item.diasRestantes >= 0 && item.diasRestantes <= 7 && item.status !== 'Pago').length
+  }, [condominios])
+
+  const alertas = useMemo(() => {
+    const lista = []
+    condominios.forEach((cond) => {
+      cond.contas.forEach((conta) => {
+        const dias = calcularDiasParaData(conta.vencimento)
+        if (dias !== null && dias >= 0 && dias <= 3 && conta.status !== 'Pago') {
+          lista.push({ tipo: 'conta', titulo: conta.titulo, condominio: cond.nome, dias, id: conta.id })
+        }
+      })
+      cond.manutencoes.forEach((m) => {
+        if (m.proximaData) {
+          const dias = calcularDiasParaData(m.proximaData)
+          if (dias !== null && dias >= 0 && dias <= 3) {
+            lista.push({ tipo: 'manutencao', titulo: m.titulo, condominio: cond.nome, dias, id: m.id })
+          }
+        }
+      })
+    })
+    return lista
+  }, [condominios])
 
   return (
     <AdminShell
-      title="Painel do administrador"
-      subtitle="Acompanhe os condominios que voce administra, enxergue contas a vencer, manutencoes proximas e comunicados importantes em um unico lugar."
+      title="Dashboard administrativo"
+      subtitle="Tela inicial com visão consolidada de contas, manutenções, avisos e a carteira de condomínios."
       currentPath="/dashboard"
     >
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      {alertas.length > 0 && (
+        <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-amber-700">⚠️ Vencimentos nos próximos 3 dias</p>
+          <div className="space-y-1">
+            {alertas.map((a) => (
+              <div key={a.id} className="flex items-center justify-between text-sm">
+                <span className="font-medium text-amber-900">{a.titulo} <span className="font-normal text-amber-700">— {a.condominio}</span></span>
+                <span className="rounded-full bg-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                  {a.dias === 0 ? 'Hoje' : `${a.dias} dia(s)`}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+<section className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Condominios ativos"
           value={resumo.totalCondominios}
@@ -34,18 +102,18 @@ export default function DashboardPage() {
           helper="Total estimado entre os condominios"
         />
         <MetricCard
-          label="Contas criticas"
-          value={resumo.contasAtrasadas}
-          helper="Titulos atrasados que pedem acao imediata"
+          label="Manutencoes criticas"
+          value={resumo.manutencoesAtrasadas}
+          helper="Pendentes, nao realizadas ou atrasadas"
         />
         <MetricCard
           label="Vencem nesta semana"
-          value={resumo.contasDaSemana}
+          value={contasDaSemana}
           helper="Contas proximas dos proximos 7 dias"
         />
       </section>
 
-      <section className="mt-6 grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+      <section className="mt-3 grid gap-3 xl:grid-cols-[1.15fr_0.85fr]">
         <PriorityCard
           title="Proxima acao recomendada"
           description={
@@ -75,68 +143,8 @@ export default function DashboardPage() {
         />
       </section>
 
-      <section className="mt-6 grid gap-6 xl:grid-cols-[1.4fr_1fr]">
-        <div className="rounded-[1.75rem] border border-black/5 bg-white/85 p-6 shadow-[0_18px_50px_rgba(71,47,24,0.08)]">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-[var(--ink)]">
-                Seus condominios
-              </h2>
-              <p className="mt-1 text-sm text-[var(--muted)]">
-                Entre rapidamente em cada operacao ou use a aba de condominios para selecionar e gerenciar sua carteira.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Link
-                href="/condominios"
-                className="inline-flex rounded-full bg-[var(--ink)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-black"
-              >
-                Selecionar condominio
-              </Link>
-              <Link
-                href="/condominios/novo"
-                className="inline-flex rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--ink)] transition hover:brightness-95"
-              >
-                Cadastrar novo
-              </Link>
-            </div>
-          </div>
-
-          <div className="mt-5 grid gap-4 lg:grid-cols-2">
-            {condominios.map((condominio) => (
-              <Link
-                key={condominio.id}
-                href={`/condominios/${condominio.slug}`}
-                className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--soft)] p-5 transition hover:-translate-y-0.5 hover:shadow-lg"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-lg font-semibold text-[var(--ink)]">
-                      {condominio.nome}
-                    </h3>
-                    <p className="mt-1 text-sm text-[var(--muted)]">
-                      {condominio.cidade} | Sindico: {condominio.sindico}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent-strong)]">
-                    {condominio.unidades} und
-                  </span>
-                </div>
-
-                <div className="mt-4 grid grid-cols-3 gap-3 text-sm text-[var(--muted)]">
-                  <InfoMini label="Contas" value={condominio.contas.length} />
-                  <InfoMini label="Avisos" value={condominio.avisos.length} />
-                  <InfoMini
-                    label="Manutencoes"
-                    value={condominio.manutencoes.length}
-                  />
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid gap-6">
+      <section className="mt-3 grid gap-3 xl:grid-cols-[1.4fr_1fr]">
+        <div className="grid gap-3">
           <PanelList
             title="Contas proximas"
             items={resumo.proximasContas}
@@ -168,6 +176,24 @@ export default function DashboardPage() {
           />
 
           <PanelList
+            title="Avisos recentes"
+            items={resumo.proximosAvisos}
+            emptyLabel="Nenhum aviso registrado."
+            renderItem={(item) => (
+              <div className="w-full">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="font-medium text-[var(--ink)]">{item.titulo}</p>
+                  <p className="text-sm text-[var(--muted)]">{formatarData(item.data)}</p>
+                </div>
+                <p className="mt-1 text-sm text-[var(--muted)]">{item.condominio}</p>
+                <p className="mt-2 text-sm leading-6 text-[var(--ink)]/80">{item.descricao}</p>
+              </div>
+            )}
+          />
+        </div>
+
+        <div className="grid gap-3">
+          <PanelList
             title="Manutencoes proximas"
             items={resumo.proximasManutencoes}
             emptyLabel="Nenhuma manutencao com data definida."
@@ -190,29 +216,43 @@ export default function DashboardPage() {
               </>
             )}
           />
-        </div>
-      </section>
 
-      <section className="mt-6">
-        <PanelList
-          title="Avisos recentes"
-          items={resumo.proximosAvisos}
-          emptyLabel="Nenhum aviso registrado."
-          renderItem={(item) => (
-            <div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p className="font-medium text-[var(--ink)]">{item.titulo}</p>
-                <p className="text-sm text-[var(--muted)]">
-                  {formatarData(item.data)}
-                </p>
-              </div>
-              <p className="mt-1 text-sm text-[var(--muted)]">{item.condominio}</p>
-              <p className="mt-3 text-sm leading-6 text-[var(--ink)]/80">
-                {item.descricao}
-              </p>
-            </div>
+          {resumo.manutencoesAlerta.length > 0 && (
+            <PanelList
+              title="Manutencoes com alerta"
+              items={resumo.manutencoesAlerta}
+              emptyLabel=""
+              renderItem={(item) => (
+                <>
+                  <div>
+                    <p className="font-medium text-[var(--ink)]">{item.titulo}</p>
+                    <p className="text-sm text-[var(--muted)]">{item.condominio}</p>
+                  </div>
+                  <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
+                    {item.status}
+                  </span>
+                </>
+              )}
+            />
           )}
-        />
+
+          <PanelList
+            title="Proxima assembleia"
+            items={resumo.proximaAssembleia ? [resumo.proximaAssembleia] : []}
+            emptyLabel="Nenhuma assembleia agendada."
+            renderItem={(item) => (
+              <div className="w-full">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="font-medium text-[var(--ink)]">{item.titulo}</p>
+                  <p className="text-sm text-[var(--muted)]">{formatarData(item.data)}{item.horario ? ` · ${item.horario}` : ''}</p>
+                </div>
+                <p className="mt-1 text-sm text-[var(--muted)]">{item.condominio}</p>
+                {item.local && <p className="mt-1 text-sm text-[var(--muted)]">Local: {item.local}</p>}
+                {item.pauta && <p className="mt-2 text-sm leading-6 text-[var(--ink)]/80">{item.pauta}</p>}
+              </div>
+            )}
+          />
+        </div>
       </section>
     </AdminShell>
   )
@@ -240,17 +280,6 @@ function PriorityCard({ title, description, meta }) {
       <p className="mt-3 text-base font-medium text-[var(--panel-strong)]">{description}</p>
       <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{meta}</p>
     </article>
-  )
-}
-
-function InfoMini({ label, value }) {
-  return (
-    <div className="rounded-2xl bg-white px-3 py-3">
-      <p className="text-xs uppercase tracking-[0.18em] text-[var(--muted)]">
-        {label}
-      </p>
-      <p className="mt-2 text-lg font-semibold text-[var(--ink)]">{value}</p>
-    </div>
   )
 }
 

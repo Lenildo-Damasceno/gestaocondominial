@@ -1,3 +1,17 @@
+/**
+ * app/globals.css
+ * 
+ * Estilos globais da aplicação
+ * - Importa Tailwind CSS v4
+ * - Define variáveis CSS para tema: cores, padrão visual
+ * - Configurações de scroll, tipografia e links
+ * - Variáveis customizadas:
+ *   - --background: azul escuro (#071424)
+ *   - --accent: ciano (#22d3ee)
+ *   - --accent-strong: azul forte (#0f52ff)
+ *   - Demais: --foreground, --canvas, --muted, --line, --panel
+ */
+
 @import "tailwindcss";
 
 :root {
@@ -34,6 +48,5 @@ body {
 }
 
 a {
-  color: inherit;
   text-decoration: none;
 }

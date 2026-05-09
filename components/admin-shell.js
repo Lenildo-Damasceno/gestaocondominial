@@ -1,3 +1,14 @@
+/**
+ * components/admin-shell.js
+ * 
+ * Componente wrapper/layout reutilizável para páginas administrativas
+ * - Exibe header com título, subtítulo e ações customizadas
+ * - Navbar lateral com itens navegáveis (Dashboard, Condomínios, Configurações)
+ * - Barra de usuário com email e botão de logout
+ * - Gerencia autenticação Supabase e logout do usuário
+ * - Recebe props: title, subtitle, currentPath, children, sidebar, headerActions
+ */
+
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -8,14 +19,20 @@ const navItems = [
   {
     href: '/dashboard',
     label: 'Dashboard',
-    helper: 'Visao geral',
+    helper: 'Tela inicial',
     badge: '01',
   },
   {
     href: '/condominios',
-    label: 'Condominios',
-    helper: 'Selecionar e gerenciar',
+    label: 'Condomínios',
+    helper: 'Selecione um condomínio',
     badge: '02',
+  },
+  {
+    href: '/configuracoes',
+    label: 'Configurações',
+    helper: 'Gerenciar usuários',
+    badge: '03',
   },
 ]
 
@@ -28,13 +45,28 @@ export default function AdminShell({
   headerActions,
 }) {
   const [email, setEmail] = useState('')
-  const [carregando, setCarregando] = useState(true)
+  const [carregando, setCarregando] = useState(false)
   const [saindo, setSaindo] = useState(false)
+  const [menuAberto, setMenuAberto] = useState(false)
 
   useEffect(() => {
     let ativo = true
 
     async function carregarSessao() {
+      // Só carrega se a página estiver visível para evitar impacto no LCP
+      if (document.hidden) {
+        const handleVisibilityChange = () => {
+          if (!document.hidden && ativo) {
+            document.removeEventListener('visibilitychange', handleVisibilityChange)
+            carregarSessao()
+          }
+        }
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+        return
+      }
+
+      setCarregando(true) // Só ativa loading quando realmente necessário
+
       if (!supabase) {
         window.location.href = '/'
         return
@@ -78,9 +110,7 @@ export default function AdminShell({
   if (carregando) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[var(--canvas)] px-4">
-        <p className="text-sm font-medium text-[var(--muted)]">
-          Carregando painel...
-        </p>
+        <p className="text-sm font-medium text-[var(--muted)]">Carregando painel...</p>
       </main>
     )
   }
@@ -88,34 +118,33 @@ export default function AdminShell({
   function navClass(path) {
     return currentPath === path
       ? 'bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] text-white shadow-[0_18px_35px_rgba(14,165,233,0.25)]'
-      : 'bg-white/10 text-white/82 ring-1 ring-white/12 hover:bg-white/16'
+      : 'rounded-[1.5rem] border border-white/12 bg-white/10 text-white/82 hover:bg-white/16'
   }
 
   const sidebarContent = sidebar || (
     <>
-      <div className="rounded-[1.3rem] border border-white/10 bg-white/6 p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-[var(--accent)]">
-          Gestao central
-        </p>
-        <h2 className="mt-3 text-2xl font-semibold tracking-tight">
-          Seu painel
+      <div className="rounded-[1.5rem] border border-white/10 bg-white/6 p-5">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-[var(--accent)]">Você está em</p>
+        <h2 className="mt-2 text-lg font-semibold tracking-tight">
+          {navItems.find((i) => i.href === currentPath)?.label || 'Painel'}
         </h2>
-        <p className="mt-3 text-sm leading-6 text-white/68">
-          Controle sua carteira de condominios com uma navegacao fixa e foco na operacao.
+        <p className="mt-2 text-xs text-white/60">
+          {navItems.find((i) => i.href === currentPath)?.helper || 'Navegue pelo menu abaixo'}
         </p>
       </div>
 
-      <nav className="mt-4 grid gap-2">
+      <nav aria-label="Menu principal" className="mt-5 grid gap-2">
         {navItems.map((item) => (
           <Link
             key={item.href}
             href={item.href}
-            className={`group rounded-[1rem] px-3.5 py-3 transition ${navClass(item.href)}`}
+            aria-current={currentPath === item.href ? 'page' : undefined}
+            className={`${navClass(item.href)} group px-4 py-3 transition`}
           >
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold">{item.label}</p>
-                <p className="mt-1 text-xs text-inherit/70">{item.helper}</p>
+                <p className="mt-1 text-xs text-inherit/70 hidden sm:block">{item.helper}</p>
               </div>
               <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">
                 {item.badge}
@@ -124,23 +153,74 @@ export default function AdminShell({
           </Link>
         ))}
       </nav>
+
     </>
   )
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.18),_transparent_26%),radial-gradient(circle_at_bottom_right,_rgba(249,115,22,0.22),_transparent_28%),linear-gradient(135deg,_#041324_0%,_#0c1f35_48%,_#111a32_100%)] px-3 py-3 sm:px-4 sm:py-4">
+
+      {/* Botão 3 pontinhos mobile */}
+      <button
+        type="button"
+        onClick={() => setMenuAberto(true)}
+        className="fixed bottom-5 right-5 z-50 flex lg:hidden h-12 w-12 flex-col items-center justify-center gap-1 rounded-full bg-[#1a3a5c] shadow-[0_4px_20px_rgba(26,58,92,0.5)] transition hover:bg-[#1e4a72]"
+        aria-label="Abrir menu"
+      >
+        <span className="h-1 w-1 rounded-full bg-white" />
+        <span className="h-1 w-1 rounded-full bg-white" />
+        <span className="h-1 w-1 rounded-full bg-white" />
+      </button>
+
+      {/* Overlay */}
+      {menuAberto && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          onClick={() => setMenuAberto(false)}
+        />
+      )}
+
+      {/* Drawer mobile */}
+      <div className={`fixed inset-y-0 left-0 z-50 w-72 transform transition-transform duration-300 lg:hidden ${
+        menuAberto ? 'translate-x-0' : '-translate-x-full'
+      }`}>
+        <div className="flex h-full flex-col overflow-y-auto rounded-r-[2rem] border-r border-white/10 bg-[linear-gradient(180deg,rgba(11,24,44,0.98),rgba(11,20,36,0.95))] p-5 text-white shadow-[4px_0_40px_rgba(2,6,23,0.5)]">
+          <div className="flex items-center justify-between mb-5">
+            <p className="text-sm font-semibold text-white/80">Menu</p>
+            <button
+              type="button"
+              onClick={() => setMenuAberto(false)}
+              className="rounded-full bg-white/10 p-2 text-white/70 hover:bg-white/20"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+              </svg>
+            </button>
+          </div>
+          {sidebarContent}
+          <div className="mt-4 rounded-[1.3rem] border border-cyan-300/18 bg-[linear-gradient(135deg,rgba(34,211,238,0.18),rgba(168,85,247,0.16))] p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-cyan-200">Administrador</p>
+            <p className="mt-3 break-all text-sm font-medium text-white/88">{email}</p>
+            <button
+              type="button"
+              onClick={sair}
+              disabled={saindo}
+              className="mt-4 w-full rounded-full bg-white px-4 py-3 text-sm font-semibold text-[var(--panel-strong)] transition hover:brightness-95 disabled:opacity-50"
+            >
+              {saindo ? 'Saindo...' : 'Sair do sistema'}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="mx-auto flex min-h-[calc(100vh-1.5rem)] max-w-[1600px] flex-col gap-4 lg:flex-row">
-        <aside className="lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] lg:w-[280px] lg:flex-none">
-          <div className="flex h-full flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(11,24,44,0.96),rgba(11,20,36,0.92))] p-5 text-white shadow-[0_30px_80px_rgba(2,6,23,0.45)] backdrop-blur">
+        <aside className="hidden lg:block lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] lg:w-[300px] lg:flex-none">
+          <div className="flex h-full min-h-0 flex-col overflow-hidden overflow-y-auto max-h-[calc(100vh-3.5rem)] rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(11,24,44,0.96),rgba(11,20,36,0.92))] p-4 text-white shadow-[0_30px_80px_rgba(2,6,23,0.45)] backdrop-blur sm:p-5">
             {sidebarContent}
 
             <div className="mt-4 rounded-[1.3rem] border border-cyan-300/18 bg-[linear-gradient(135deg,rgba(34,211,238,0.18),rgba(168,85,247,0.16))] p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-cyan-200">
-                Administrador
-              </p>
-              <p className="mt-3 break-all text-sm font-medium text-white/88">
-                {email}
-              </p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-cyan-200">Administrador</p>
+              <p className="mt-3 break-all text-sm font-medium text-white/88">{email}</p>
               <button
                 type="button"
                 onClick={sair}
@@ -151,14 +231,7 @@ export default function AdminShell({
               </button>
             </div>
 
-            <div className="mt-auto rounded-[1.3rem] border border-white/8 bg-white/6 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-fuchsia-200">
-                Operacao
-              </p>
-              <p className="mt-3 text-sm leading-6 text-white/68">
-                Use a aba de condominios para escolher um condominio especifico e acompanhar somente aquela rotina.
-              </p>
-            </div>
+
           </div>
         </aside>
 
@@ -170,26 +243,18 @@ export default function AdminShell({
 
               <div className="relative flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                 <div className="max-w-4xl">
-                  <p className="text-xs font-semibold uppercase tracking-[0.38em] text-[#0f52ff]">
-                    Painel administrativo
-                  </p>
-                  <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[var(--panel-strong)] sm:text-4xl">
-                    {title}
-                  </h1>
-                  <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--muted)] sm:text-base">
-                    {subtitle}
-                  </p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.38em] text-[#0f52ff]">Painel administrativo</p>
+                  <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[var(--panel-strong)] sm:text-4xl">{title}</h1>
+                  <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--muted)] sm:text-base">{subtitle}</p>
                 </div>
 
                 {headerActions ? (
-                  <div className="flex flex-wrap gap-3 lg:justify-end">
-                    {headerActions}
-                  </div>
+                  <div className="flex flex-wrap gap-3 lg:justify-end">{headerActions}</div>
                 ) : null}
               </div>
             </header>
 
-            <div className="p-4 sm:p-6 lg:p-8">{children}</div>
+            <div className="p-3 sm:p-4 lg:p-6">{children}</div>
           </div>
         </section>
       </div>
