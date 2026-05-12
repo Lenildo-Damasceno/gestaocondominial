@@ -14,12 +14,12 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import AdminShell from '@/components/admin-shell'
+import AdminShell from '@/views/components/admin-shell'
 import {
   excluirCondominio,
   formatarData,
   listarCondominios,
-} from '@/lib/condominios'
+} from '@/controllers/condominio'
 
 export default function CondominiosPage() {
   const [excluindo, setExcluindo] = useState('')

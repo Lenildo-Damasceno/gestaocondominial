@@ -10,7 +10,7 @@
  */
 
 import Link from 'next/link'
-import AdminShell from '@/components/admin-shell'
+import AdminShell from '@/views/components/admin-shell'
 
 export default function ManutencoesPage() {
   return (

@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import AdminShell from '@/components/admin-shell'
-import { adicionarCondominio } from '@/lib/condominios'
+import AdminShell from '@/views/components/admin-shell'
+import { adicionarCondominio } from '@/controllers/condominio'
 
 const inputClass = 'w-full rounded-2xl border border-[var(--line)] bg-[var(--soft)] px-4 py-3 text-sm outline-none transition focus:border-[var(--accent)]'
 

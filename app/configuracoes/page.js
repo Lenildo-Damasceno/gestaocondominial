@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import AdminShell from '@/components/admin-shell'
-import { supabase } from '@/lib/supabase'
+import AdminShell from '@/views/components/admin-shell'
+import { supabase } from '@/models/supabase'
 
 export default function ConfiguracoesPage() {
   const [usuarios, setUsuarios] = useState([])

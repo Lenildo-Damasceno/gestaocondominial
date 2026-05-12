@@ -1,326 +1,341 @@
-/**
- * app/dashboard/page.js
- * 
- * Dashboard principal do sistema (rota: /dashboard)
- * - Página protegida apenas para usuários autenticados
- * - Exibe resumo de todos os condomínios: total de unidades, contas pendentes
- * - Lista contas críticas (vencidas ou prestes a vencer) em tempo real
- * - Mostra contas da semana organizadas por urgência
- * - Usa AdminShell para layout padrão com navegação
- * - Calcula dados no cliente com useMemo para evitar hidratação
- */
-
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import AdminShell from '@/components/admin-shell'
+import Link from 'next/link'
+import AdminShell from '@/views/components/admin-shell'
+import DetalheModal from '@/views/components/detalhe-modal'
 import {
   calcularDiasParaData,
-  descreverRecorrenciaConta,
   formatarData,
   formatarMoeda,
   listarCondominios,
+  normalizarConta,
   resumirUrgenciaConta,
-  resumirDashboard,
-} from '@/lib/condominios'
+} from '@/controllers/condominio'
 
 export default function DashboardPage() {
   const [condominios, setCondominios] = useState([])
+  const [modal, setModal] = useState(null)
 
   useEffect(() => {
     setCondominios(listarCondominios())
   }, [])
 
-  const resumo = resumirDashboard(condominios)
+  function abrirModal(item, tipo, slug) {
+    setModal({ item, tipo, slug })
+  }
 
-  const contasDaSemana = useMemo(() => {
-    const contas = condominios.flatMap((item) =>
-      item.contas.map((conta) => ({
-        ...conta,
-        condominio: item.nome,
-        slug: item.slug,
-      }))
+  function fecharModal() {
+    setModal(null)
+    setCondominios(listarCondominios())
+  }
+
+  const dados = useMemo(() => {
+    const todasContas = condominios.flatMap((c) =>
+      c.contas.map((conta) => ({ ...normalizarConta(conta), condominio: c.nome, slug: c.slug }))
     )
-    const contasComUrgencia = contas.map((item) => ({
-      ...item,
-      diasRestantes: calcularDiasParaData(item.vencimento),
-    }))
-    return contasComUrgencia.filter((item) => item.diasRestantes >= 0 && item.diasRestantes <= 7 && item.status !== 'Pago').length
+    const todasManutencoes = condominios.flatMap((c) =>
+      c.manutencoes.map((m) => ({ ...m, condominio: c.nome, slug: c.slug }))
+    )
+    const todosAvisos = condominios.flatMap((c) =>
+      c.avisos.map((a) => ({ ...a, condominio: c.nome, slug: c.slug }))
+    )
+
+    const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0)
+
+    const contasVencidasHoje = todasContas.filter((c) => {
+      const dias = calcularDiasParaData(c.proximoVencimento || c.vencimento)
+      return dias === 0 && c.status !== 'Pago'
+    })
+
+    const alertasContas = todasContas
+      .filter((c) => {
+        const dias = calcularDiasParaData(c.proximoVencimento || c.vencimento)
+        return dias !== null && dias >= 0 && dias <= 3 && c.status !== 'Pago'
+      })
+      .sort((a, b) =>
+        calcularDiasParaData(a.proximoVencimento || a.vencimento) -
+        calcularDiasParaData(b.proximoVencimento || b.vencimento)
+      )
+
+    const alertasManutencoes = todasManutencoes
+      .filter((m) => {
+        if (!m.proximaData) return false
+        const dias = calcularDiasParaData(m.proximaData)
+        return dias !== null && dias >= 0 && dias <= 3
+      })
+      .sort((a, b) => calcularDiasParaData(a.proximaData) - calcularDiasParaData(b.proximaData))
+
+    const STATUS_CRITICO = ['Não realizada', 'Pendente', 'Atrasada']
+    const manutencoesAlerta = todasManutencoes.filter((m) => STATUS_CRITICO.includes(m.status))
+
+    const proximasContas = [...todasContas]
+      .filter((c) => c.status !== 'Pago')
+      .sort((a, b) =>
+        String(a.proximoVencimento || a.vencimento).localeCompare(
+          String(b.proximoVencimento || b.vencimento)
+        )
+      )
+      .slice(0, 6)
+
+    const proximasManutencoes = [...todasManutencoes]
+      .filter((m) => m.proximaData)
+      .sort((a, b) => String(a.proximaData).localeCompare(String(b.proximaData)))
+      .slice(0, 5)
+
+    const avisosRecentes = [...todosAvisos]
+      .sort((a, b) => String(b.data).localeCompare(String(a.data)))
+      .slice(0, 4)
+
+    const condominiosComPendencias = condominios.map((c) => {
+      const contasPendentes = c.contas.filter((ct) => ct.status !== 'Pago').length
+      const manutencoesCriticas = c.manutencoes.filter((m) => STATUS_CRITICO.includes(m.status)).length
+      return { ...c, contasPendentes, manutencoesCriticas }
+    })
+
+    return {
+      totalCondominios: condominios.length,
+      totalUnidades: condominios.reduce((acc, c) => acc + (c.unidades || 0), 0),
+      contasVencidasHoje: contasVencidasHoje.length,
+      manutencoesAtrasadas: manutencoesAlerta.length,
+      alertasContas,
+      alertasManutencoes,
+      proximasContas,
+      proximasManutencoes,
+      manutencoesAlerta,
+      avisosRecentes,
+      condominiosComPendencias,
+    }
   }, [condominios])
 
-  const alertas = useMemo(() => {
-    const lista = []
-    condominios.forEach((cond) => {
-      cond.contas.forEach((conta) => {
-        const dias = calcularDiasParaData(conta.vencimento)
-        if (dias !== null && dias >= 0 && dias <= 3 && conta.status !== 'Pago') {
-          lista.push({ tipo: 'conta', titulo: conta.titulo, condominio: cond.nome, dias, id: conta.id })
-        }
-      })
-      cond.manutencoes.forEach((m) => {
-        if (m.proximaData) {
-          const dias = calcularDiasParaData(m.proximaData)
-          if (dias !== null && dias >= 0 && dias <= 3) {
-            lista.push({ tipo: 'manutencao', titulo: m.titulo, condominio: cond.nome, dias, id: m.id })
-          }
-        }
-      })
-    })
-    return lista
-  }, [condominios])
+  const temAlertas = dados.alertasContas.length > 0 || dados.alertasManutencoes.length > 0
 
   return (
+    <>
     <AdminShell
-      title="Dashboard administrativo"
-      subtitle="Tela inicial com visão consolidada de contas, manutenções, avisos e a carteira de condomínios."
+      title="Dashboard"
+      subtitle="Visão geral da sua carteira de condomínios."
       currentPath="/dashboard"
     >
-      {alertas.length > 0 && (
-        <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-amber-700">⚠️ Vencimentos nos próximos 3 dias</p>
-          <div className="space-y-1">
-            {alertas.map((a) => (
-              <div key={a.id} className="flex items-center justify-between text-sm">
-                <span className="font-medium text-amber-900">{a.titulo} <span className="font-normal text-amber-700">— {a.condominio}</span></span>
-                <span className="rounded-full bg-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                  {a.dias === 0 ? 'Hoje' : `${a.dias} dia(s)`}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-<section className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          label="Condominios ativos"
-          value={resumo.totalCondominios}
-          helper="Base atual sob sua administracao"
-        />
-        <MetricCard
-          label="Unidades acompanhadas"
-          value={resumo.totalUnidades}
-          helper="Total estimado entre os condominios"
-        />
-        <MetricCard
-          label="Manutencoes criticas"
-          value={resumo.manutencoesAtrasadas}
-          helper="Pendentes, nao realizadas ou atrasadas"
-        />
-        <MetricCard
-          label="Vencem nesta semana"
-          value={contasDaSemana}
-          helper="Contas proximas dos proximos 7 dias"
-        />
-      </section>
+      <div className="space-y-3">
 
-      <section className="mt-3 grid gap-3 xl:grid-cols-[1.15fr_0.85fr]">
-        <PriorityCard
-          title="Proxima acao recomendada"
-          description={
-            resumo.proximasContas[0]
-              ? `${resumo.proximasContas[0].titulo} no ${resumo.proximasContas[0].condominio}`
-              : 'Nenhuma conta cadastrada para acompanhamento.'
-          }
-          meta={
-            resumo.proximasContas[0]
-              ? `${formatarData(resumo.proximasContas[0].proximoVencimento || resumo.proximasContas[0].vencimento)} · ${resumirUrgenciaConta(resumo.proximasContas[0]).label}`
-              : 'Cadastre contas para comecar os lembretes.'
-          }
-        />
-
-        <PriorityCard
-          title="Proxima assembleia"
-          description={
-            resumo.proximaAssembleia
-              ? `${resumo.proximaAssembleia.titulo} em ${resumo.proximaAssembleia.condominio}`
-              : 'Nenhuma assembleia agendada no momento.'
-          }
-          meta={
-            resumo.proximaAssembleia
-              ? `${formatarData(resumo.proximaAssembleia.data)} · faltam ${calcularDiasParaData(resumo.proximaAssembleia.data)} dia(s)`
-              : 'Cadastre assembleias para acompanhar o calendario.'
-          }
-        />
-      </section>
-
-      <section className="mt-3 grid gap-3 xl:grid-cols-[1.4fr_1fr]">
-        <div className="grid gap-3">
-          <PanelList
-            title="Contas proximas"
-            items={resumo.proximasContas}
-            emptyLabel="Nenhuma conta cadastrada."
-            renderItem={(item) => (
-              <>
-                <div>
-                  <p className="font-medium text-[var(--ink)]">{item.titulo}</p>
-                  <p className="text-sm text-[var(--muted)]">{item.condominio}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-semibold text-[var(--ink)]">
-                    {formatarMoeda(item.valor)}
-                  </p>
-                  <p className="text-sm text-[var(--muted)]">
-                    {formatarData(item.proximoVencimento || item.vencimento)}
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
-                  <StatusPill tone={resumirUrgenciaConta(item).tone}>
-                    {resumirUrgenciaConta(item).label}
-                  </StatusPill>
-                  <p className="text-xs text-[var(--muted)]">
-                    {descreverRecorrenciaConta(item)}
-                  </p>
-                </div>
-              </>
-            )}
-          />
-
-          <PanelList
-            title="Avisos recentes"
-            items={resumo.proximosAvisos}
-            emptyLabel="Nenhum aviso registrado."
-            renderItem={(item) => (
-              <div className="w-full">
-                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="font-medium text-[var(--ink)]">{item.titulo}</p>
-                  <p className="text-sm text-[var(--muted)]">{formatarData(item.data)}</p>
-                </div>
-                <p className="mt-1 text-sm text-[var(--muted)]">{item.condominio}</p>
-                <p className="mt-2 text-sm leading-6 text-[var(--ink)]/80">{item.descricao}</p>
-              </div>
-            )}
-          />
-        </div>
-
-        <div className="grid gap-3">
-          <PanelList
-            title="Manutencoes proximas"
-            items={resumo.proximasManutencoes}
-            emptyLabel="Nenhuma manutencao com data definida."
-            renderItem={(item) => (
-              <>
-                <div>
-                  <p className="font-medium text-[var(--ink)]">{item.titulo}</p>
-                  <p className="text-sm text-[var(--muted)]">
-                    {item.condominio} | {item.frequencia}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-[var(--ink)]">
-                    {formatarData(item.proximaData)}
-                  </p>
-                  <p className="text-xs uppercase tracking-[0.2em] text-[var(--accent-strong)]">
-                    {item.status}
-                  </p>
-                </div>
-              </>
-            )}
-          />
-
-          {resumo.manutencoesAlerta.length > 0 && (
-            <PanelList
-              title="Manutencoes com alerta"
-              items={resumo.manutencoesAlerta}
-              emptyLabel=""
-              renderItem={(item) => (
-                <>
-                  <div>
-                    <p className="font-medium text-[var(--ink)]">{item.titulo}</p>
-                    <p className="text-sm text-[var(--muted)]">{item.condominio}</p>
+        {/* Alertas críticos */}
+        {temAlertas && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 space-y-3">
+            <p className="text-xs font-bold uppercase tracking-wider text-red-700">🚨 Atenção — próximos 3 dias</p>
+            {dados.alertasContas.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-red-500 mb-1">Contas</p>
+                {dados.alertasContas.map((a) => (
+                  <div key={a.id} className="flex items-center justify-between text-sm">
+                    <span className="font-medium text-red-900 truncate mr-2">
+                      {a.titulo} <span className="font-normal text-red-600">— {a.condominio}</span>
+                    </span>
+                    <span className="shrink-0 rounded-full bg-red-200 px-2 py-0.5 text-xs font-bold text-red-800">
+                      {calcularDiasParaData(a.proximoVencimento || a.vencimento) === 0 ? 'Hoje' : `${calcularDiasParaData(a.proximoVencimento || a.vencimento)} dia(s)`}
+                    </span>
                   </div>
-                  <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">
-                    {item.status}
-                  </span>
-                </>
-              )}
-            />
-          )}
-
-          <PanelList
-            title="Proxima assembleia"
-            items={resumo.proximaAssembleia ? [resumo.proximaAssembleia] : []}
-            emptyLabel="Nenhuma assembleia agendada."
-            renderItem={(item) => (
-              <div className="w-full">
-                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="font-medium text-[var(--ink)]">{item.titulo}</p>
-                  <p className="text-sm text-[var(--muted)]">{formatarData(item.data)}{item.horario ? ` · ${item.horario}` : ''}</p>
-                </div>
-                <p className="mt-1 text-sm text-[var(--muted)]">{item.condominio}</p>
-                {item.local && <p className="mt-1 text-sm text-[var(--muted)]">Local: {item.local}</p>}
-                {item.pauta && <p className="mt-2 text-sm leading-6 text-[var(--ink)]/80">{item.pauta}</p>}
+                ))}
               </div>
             )}
-          />
-        </div>
-      </section>
-    </AdminShell>
-  )
-}
-
-function MetricCard({ label, value, helper }) {
-  return (
-    <article className="rounded-[1.75rem] border border-black/5 bg-white/85 p-5 shadow-[0_16px_40px_rgba(71,47,24,0.06)]">
-      <p className="text-sm text-[var(--muted)]">{label}</p>
-      <p className="mt-3 text-4xl font-semibold tracking-tight text-[var(--ink)]">
-        {value}
-      </p>
-      <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{helper}</p>
-    </article>
-  )
-}
-
-function PriorityCard({ title, description, meta }) {
-  return (
-    <article className="rounded-[1.75rem] border border-black/5 bg-[linear-gradient(135deg,rgba(15,82,255,0.08),rgba(34,211,238,0.08),rgba(255,255,255,0.92))] p-6 shadow-[0_16px_40px_rgba(71,47,24,0.06)]">
-      <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[var(--accent-strong)]">
-        Prioridade
-      </p>
-      <h2 className="mt-3 text-xl font-semibold text-[var(--ink)]">{title}</h2>
-      <p className="mt-3 text-base font-medium text-[var(--panel-strong)]">{description}</p>
-      <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{meta}</p>
-    </article>
-  )
-}
-
-function PanelList({ title, items, emptyLabel, renderItem }) {
-  return (
-    <section className="rounded-[1.75rem] border border-black/5 bg-white/85 p-6 shadow-[0_18px_50px_rgba(71,47,24,0.08)]">
-      <h2 className="text-xl font-semibold text-[var(--ink)]">{title}</h2>
-
-      <div className="mt-5 space-y-3">
-        {items.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--soft)] px-4 py-5 text-sm text-[var(--muted)]">
-            {emptyLabel}
+            {dados.alertasManutencoes.length > 0 && (
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-600 mb-1">Manutenções</p>
+                {dados.alertasManutencoes.map((m) => (
+                  <div key={m.id} className="flex items-center justify-between text-sm">
+                    <span className="font-medium text-amber-900 truncate mr-2">
+                      {m.titulo} <span className="font-normal text-amber-700">— {m.condominio}</span>
+                    </span>
+                    <span className="shrink-0 rounded-full bg-amber-200 px-2 py-0.5 text-xs font-bold text-amber-800">
+                      {calcularDiasParaData(m.proximaData) === 0 ? 'Hoje' : `${calcularDiasParaData(m.proximaData)} dia(s)`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        ) : (
-          items.map((item) => (
-            <div
-              key={item.id}
-              className="flex flex-col gap-3 rounded-2xl border border-[var(--line)] bg-[var(--soft)] p-4 sm:flex-row sm:items-center sm:justify-between"
-            >
-              {renderItem(item)}
-            </div>
-          ))
         )}
+
+        {/* Métricas */}
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <MetricCard label="Condomínios" value={dados.totalCondominios} helper="Na sua carteira" tone="blue" />
+          <MetricCard label="Unidades" value={dados.totalUnidades} helper="Total administrado" tone="cyan" />
+          <MetricCard label="Vencem hoje" value={dados.contasVencidasHoje} helper="Contas para pagar" tone={dados.contasVencidasHoje > 0 ? 'red' : 'green'} />
+          <MetricCard label="Manutenções críticas" value={dados.manutencoesAtrasadas} helper="Pendentes ou atrasadas" tone={dados.manutencoesAtrasadas > 0 ? 'amber' : 'green'} />
+        </div>
+
+        {/* Condomínios — acesso rápido */}
+        <section className="rounded-2xl border border-black/5 bg-white/85 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-semibold text-[var(--ink)]">Seus condomínios</h2>
+            <Link href="/condominios" className="text-xs font-semibold text-[var(--accent-strong)] hover:underline">Ver todos →</Link>
+          </div>
+          {dados.condominiosComPendencias.length === 0 ? (
+            <p className="text-sm text-[var(--muted)]">Nenhum condomínio cadastrado.</p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {dados.condominiosComPendencias.map((c) => (
+                <Link
+                  key={c.slug}
+                  href={`/condominios/${c.slug}`}
+                  className="flex items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--soft)] px-3 py-2.5 transition hover:bg-blue-50 hover:border-blue-200 active:scale-95"
+                >
+                  <div className="min-w-0">
+                    <p className="font-semibold text-sm text-[var(--ink)] truncate">{c.nome}</p>
+                    <p className="text-xs text-[var(--muted)]">{c.cidade} · {c.unidades} un.</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5 ml-2">
+                    {c.contasPendentes > 0 && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-700">{c.contasPendentes} conta{c.contasPendentes > 1 ? 's' : ''}</span>
+                    )}
+                    {c.manutencoesCriticas > 0 && (
+                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-700">{c.manutencoesCriticas} mant.</span>
+                    )}
+                    {c.contasPendentes === 0 && c.manutencoesCriticas === 0 && (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">OK</span>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Contas próximas + Manutenções */}
+        <div className="grid gap-3 xl:grid-cols-2">
+
+          <section className="rounded-2xl border border-black/5 bg-white/85 p-4 shadow-sm">
+            <h2 className="text-base font-semibold text-[var(--ink)] mb-3">Contas próximas</h2>
+            {dados.proximasContas.length === 0 ? (
+              <EmptyState text="Nenhuma conta pendente." />
+            ) : (
+              <div className="space-y-2">
+                {dados.proximasContas.map((item) => {
+                  const urgencia = resumirUrgenciaConta(item)
+                  return (
+                    <button key={item.id} onClick={() => abrirModal(item, 'conta', item.slug)} className="w-full flex items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--soft)] px-3 py-2 hover:bg-blue-50 hover:border-blue-200 transition text-left active:scale-95">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-[var(--ink)] truncate">{item.titulo}</p>
+                        <p className="text-xs text-[var(--muted)] truncate">{item.condominio} · {formatarData(item.proximoVencimento || item.vencimento)}</p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2 ml-2">
+                        <span className="text-sm font-semibold text-[var(--ink)]">{formatarMoeda(item.valor)}</span>
+                        <StatusPill tone={urgencia.tone}>{urgencia.label}</StatusPill>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </section>
+
+          <div className="space-y-3">
+            <section className="rounded-2xl border border-black/5 bg-white/85 p-4 shadow-sm">
+              <h2 className="text-base font-semibold text-[var(--ink)] mb-3">Manutenções próximas</h2>
+              {dados.proximasManutencoes.length === 0 ? (
+                <EmptyState text="Nenhuma manutenção com data definida." />
+              ) : (
+                <div className="space-y-2">
+                  {dados.proximasManutencoes.map((item) => (
+                    <button key={item.id} onClick={() => abrirModal(item, 'manutencao', item.slug)} className="w-full flex items-center justify-between rounded-xl border border-[var(--line)] bg-[var(--soft)] px-3 py-2 hover:bg-blue-50 hover:border-blue-200 transition text-left active:scale-95">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-[var(--ink)] truncate">{item.titulo}</p>
+                        <p className="text-xs text-[var(--muted)] truncate">{item.condominio} · {formatarData(item.proximaData)}</p>
+                      </div>
+                      <StatusBadge status={item.status} />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {dados.manutencoesAlerta.length > 0 && (
+              <section className="rounded-2xl border border-red-100 bg-red-50 p-4">
+                <h2 className="text-base font-semibold text-red-800 mb-3">Manutenções em alerta</h2>
+                <div className="space-y-2">
+                  {dados.manutencoesAlerta.slice(0, 4).map((item) => (
+                    <button key={item.id} onClick={() => abrirModal(item, 'manutencao', item.slug)} className="w-full flex items-center justify-between rounded-xl border border-red-200 bg-white px-3 py-2 hover:bg-red-50 transition text-left active:scale-95">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-[var(--ink)] truncate">{item.titulo}</p>
+                        <p className="text-xs text-[var(--muted)] truncate">{item.condominio}</p>
+                      </div>
+                      <span className="shrink-0 ml-2 rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">{item.status}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        </div>
+
+        {/* Avisos recentes */}
+        {dados.avisosRecentes.length > 0 && (
+          <section className="rounded-2xl border border-black/5 bg-white/85 p-4 shadow-sm">
+            <h2 className="text-base font-semibold text-[var(--ink)] mb-3">Avisos recentes</h2>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {dados.avisosRecentes.map((item) => (
+                <button key={item.id} onClick={() => abrirModal(item, 'aviso', item.slug)} className="w-full rounded-xl border border-[var(--line)] bg-[var(--soft)] px-3 py-2.5 hover:bg-blue-50 hover:border-blue-200 transition text-left active:scale-95">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium text-[var(--ink)] truncate">{item.titulo}</p>
+                    <p className="shrink-0 text-xs text-[var(--muted)]">{formatarData(item.data)}</p>
+                  </div>
+                  <p className="mt-0.5 text-xs text-[var(--muted)] truncate">{item.condominio}</p>
+                  <p className="mt-1 text-xs text-[var(--ink)]/70 line-clamp-2">{item.descricao}</p>
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
       </div>
-    </section>
+    </AdminShell>
+    {modal && <DetalheModal item={modal.item} tipo={modal.tipo} slug={modal.slug} onClose={fecharModal} onSaved={fecharModal} />}
+    </>
+  )
+}
+
+function MetricCard({ label, value, helper, tone }) {
+  const colors = {
+    blue:  'bg-blue-50 border-blue-100 text-blue-700',
+    cyan:  'bg-cyan-50 border-cyan-100 text-cyan-700',
+    red:   'bg-red-50 border-red-100 text-red-700',
+    amber: 'bg-amber-50 border-amber-100 text-amber-700',
+    green: 'bg-emerald-50 border-emerald-100 text-emerald-700',
+  }
+  return (
+    <article className={`rounded-2xl border p-4 ${colors[tone] || colors.blue}`}>
+      <p className="text-xs font-semibold uppercase tracking-wider opacity-70">{label}</p>
+      <p className="mt-2 text-3xl font-bold tracking-tight">{value}</p>
+      <p className="mt-1 text-xs opacity-60">{helper}</p>
+    </article>
+  )
+}
+
+function EmptyState({ text }) {
+  return (
+    <div className="rounded-xl border border-dashed border-[var(--line)] bg-[var(--soft)] px-4 py-4 text-sm text-[var(--muted)]">
+      {text}
+    </div>
   )
 }
 
 function StatusPill({ tone, children }) {
-  const toneClass =
-    tone === 'red'
-      ? 'bg-red-100 text-red-700'
-      : tone === 'amber'
-        ? 'bg-amber-100 text-amber-700'
-        : tone === 'emerald'
-          ? 'bg-emerald-100 text-emerald-700'
-          : 'bg-slate-100 text-slate-700'
+  const cls =
+    tone === 'red' ? 'bg-red-100 text-red-700'
+    : tone === 'amber' ? 'bg-amber-100 text-amber-700'
+    : tone === 'emerald' ? 'bg-emerald-100 text-emerald-700'
+    : 'bg-slate-100 text-slate-700'
+  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${cls}`}>{children}</span>
+}
 
-  return (
-    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${toneClass}`}>
-      {children}
-    </span>
-  )
+function StatusBadge({ status }) {
+  const cls =
+    status === 'Concluída' || status === 'Pago' || status === 'Paga' ? 'bg-emerald-100 text-emerald-700'
+    : status === 'Não realizada' || status === 'Atrasada' ? 'bg-red-100 text-red-700'
+    : status === 'Pendente' ? 'bg-amber-100 text-amber-700'
+    : status === 'Agendada' ? 'bg-blue-100 text-blue-700'
+    : status === 'Programada' ? 'bg-cyan-100 text-cyan-700'
+    : 'bg-amber-100 text-amber-700'
+  return <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${cls}`}>{status}</span>
 }

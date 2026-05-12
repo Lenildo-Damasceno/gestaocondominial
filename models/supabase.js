@@ -1,5 +1,5 @@
 /**
- * lib/supabase.js
+ * models/supabase.js
  * MOCK — Supabase desativado durante desenvolvimento local
  */
 

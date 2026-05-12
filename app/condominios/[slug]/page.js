@@ -15,7 +15,9 @@
 import Link from 'next/link'
 import React, { useReducer, useState } from 'react'
 import { useParams } from 'next/navigation'
-import AdminShell from '@/components/admin-shell'
+import { useSession } from '@/lib/useAuth'
+import AdminShell from '@/views/components/admin-shell'
+import DetalheModal from '@/views/components/detalhe-modal'
 import {
   adicionarAssembleiaAoCondominio,
   adicionarAvisoAoCondominio,
@@ -27,6 +29,9 @@ import {
   excluirAvisoDoCondominio,
   excluirAssembleiaDoCondominio,
   registrarHistoricoManutencao,
+  registrarVisita,
+  excluirVisita,
+  editarVisita,
   atualizarCondominio,
   buscarCondominioPorSlug,
   calcularDiasParaData,
@@ -36,7 +41,7 @@ import {
   frequenciasManutencao,
   normalizarConta,
   resumirUrgenciaConta,
-} from '@/lib/condominios'
+} from '@/controllers/condominio'
 
 export default function CondominioPage() {
   const params = useParams()
@@ -79,7 +84,18 @@ export default function CondominioPage() {
     local: '',
     pauta: '',
   })
+  const [modalVisita, setModalVisita] = useState(false)
+  const [visitaTipo, setVisitaTipo] = useState('normal')
+  const [visitaMotivo, setVisitaMotivo] = useState('')
+  const [visitaEditando, setVisitaEditando] = useState(null)
+  const [visitaEditForm, setVisitaEditForm] = useState({ tipo: 'normal', motivo: '', observacao: '' })
+  const [modal, setModal] = useState(null)
 
+  function abrirModal(item, tipo) { setModal({ item, tipo }) }
+  function fecharModal() { setModal(null); forceRefresh() }
+
+  const { user } = useSession()
+  const nomeUsuario = user?.user_metadata?.full_name || user?.email || 'Usuário'
   const condominio = slug ? buscarCondominioPorSlug(slug) : null
 
   const manutencoesPorFrequencia = (() => {
@@ -231,6 +247,51 @@ export default function CondominioPage() {
     recarregar()
   }
 
+  function fazerCheckin() {
+    setVisitaTipo('normal')
+    setVisitaMotivo('')
+    setModalVisita(true)
+  }
+
+  function confirmarCheckin() {
+    if (visitaTipo === 'urgencia' && !visitaMotivo.trim()) return
+    const agora = new Date()
+    const data = agora.toISOString().split('T')[0]
+    const hora = `${String(agora.getHours()).padStart(2,'0')}:${String(agora.getMinutes()).padStart(2,'0')}`
+    registrarVisita(condominio.slug, {
+      usuario: nomeUsuario,
+      data,
+      hora,
+      motivo: visitaTipo === 'urgencia' ? visitaMotivo.trim() : 'Visita de rotina',
+      tipo: visitaTipo,
+    })
+    setModalVisita(false)
+    forceRefresh()
+    alert(`Visita registrada com sucesso!\n\nUsuário: ${nomeUsuario}\nTipo: ${visitaTipo === 'urgencia' ? 'Urgência' : 'Rotina'}\nHora: ${hora}`)
+  }
+
+  function removerVisita(id) {
+    if (!confirm('Excluir este registro de visita?')) return
+    excluirVisita(condominio.slug, id)
+    forceRefresh()
+  }
+
+  function abrirEdicaoVisita(v) {
+    setVisitaEditando(v.id)
+    setVisitaEditForm({ tipo: v.tipo || 'normal', motivo: v.motivo || '', observacao: v.observacao || '' })
+  }
+
+  function salvarEdicaoVisita(e) {
+    e.preventDefault()
+    editarVisita(condominio.slug, visitaEditando, {
+      tipo: visitaEditForm.tipo,
+      motivo: visitaEditForm.tipo === 'urgencia' ? visitaEditForm.motivo : 'Visita de rotina',
+      observacao: visitaEditForm.observacao,
+    }, nomeUsuario)
+    setVisitaEditando(null)
+    forceRefresh()
+  }
+
   function abrirSecao(secao) {
     setSecaoAtiva(secao)
     setPainelAberto('')
@@ -245,6 +306,7 @@ export default function CondominioPage() {
     { id: 'contas', label: 'Contas', helper: 'Despesas e títulos' },
     { id: 'avisos', label: 'Avisos', helper: 'Comunicados' },
     { id: 'assembleias', label: 'Assembleias', helper: 'Atas e encontros' },
+    { id: 'visitas', label: 'Visitas', helper: 'Check-in de visitas' },
     { id: 'lembretes', label: 'Lembretes', helper: 'O que não pode esquecer' },
   ]
 
@@ -388,6 +450,25 @@ export default function CondominioPage() {
 
         <button
           type="button"
+          aria-current={secaoAtiva === 'visitas' ? 'page' : undefined}
+          onClick={() => abrirSecao('visitas')}
+          className={
+            secaoAtiva === 'visitas'
+              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
+              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
+          }
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Visitas</p>
+              <p className="mt-1 text-xs text-white/62 hidden sm:block">Check-in de visitas</p>
+            </div>
+            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">{(condominio.visitas || []).length.toString().padStart(2,'0')}</span>
+          </div>
+        </button>
+
+        <button
+          type="button"
           aria-current={secaoAtiva === 'lembretes' ? 'page' : undefined}
           onClick={() => abrirSecao('lembretes')}
           className={
@@ -443,30 +524,21 @@ export default function CondominioPage() {
   )
 
   const headerActions = (
-    <>
-      <Link
-        href="/dashboard"
-        className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-[var(--panel-strong)] ring-1 ring-slate-200 transition hover:bg-[var(--soft)]"
-      >
-        Inicio do sistema
-      </Link>
-      <Link
-        href="/condominios"
-        className="inline-flex items-center justify-center rounded-full bg-[var(--panel-strong)] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
-      >
-        Todos os condominios
-      </Link>
-    </>
+    <div className="text-right text-sm">
+      <p className="text-[var(--muted)]">{condominio.cidade}{condominio.sindico ? ` · Síndico: ${condominio.sindico}` : ''}</p>
+      <p className="text-xs text-[var(--muted)] mt-0.5">{condominio.unidades} unidades</p>
+    </div>
   )
 
   return (
-    <AdminShell
-      title={condominio.nome}
-      subtitle={`Painel operacional do condominio em ${condominio.cidade}. O menu lateral agora pertence a este condominio.`}
-      currentPath=""
-      sidebar={sidebar}
-      headerActions={headerActions}
-    >
+    <>
+      <AdminShell
+        title={condominio.nome}
+        subtitle={`Painel operacional do condominio em ${condominio.cidade}. O menu lateral agora pertence a este condominio.`}
+        currentPath=""
+        sidebar={sidebar}
+        headerActions={headerActions}
+      >
       <div className="space-y-3">
         <section className="rounded-[1.75rem] border border-slate-200/70 bg-[linear-gradient(135deg,rgba(15,82,255,0.08),rgba(34,211,238,0.08),rgba(249,115,22,0.08))] p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -479,7 +551,7 @@ export default function CondominioPage() {
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <QuickActionButton
                 label="Cadastrar conta"
                 active={painelAberto === 'conta'}
@@ -512,206 +584,132 @@ export default function CondominioPage() {
                   setPainelAberto((atual) => (atual === 'assembleia' ? '' : 'assembleia')))
                 }
               />
+              <span className="hidden lg:block h-6 w-px bg-slate-300" />
+              <button
+                type="button"
+                onClick={fazerCheckin}
+                className="rounded-full bg-[var(--panel-strong)] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
+              >
+                📍 Registrar visita
+              </button>
+              <Link
+                href={`/condominios/${condominio.slug}/relatorio`}
+                className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
+              >
+                📄 Gerar relatório
+              </Link>
             </div>
           </div>
         </section>
 
         {secaoAtiva === 'resumo' ? (
           <section id="resumo" className="space-y-3">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <SummaryCard label="Sindico" value={condominio.sindico} />
-              <SummaryCard label="Unidades" value={condominio.unidades} />
-              <SummaryCard label="Contas recorrentes" value={totalRecorrentes} />
-              <SummaryCard label="Assembleias" value={condominio.assembleias?.length || 0} />
-            </div>
 
-            <div className="grid gap-3 xl:grid-cols-2">
-              <InsightCard
-                title="Proxima conta"
-                description={
-                  proximaConta
-                    ? `${proximaConta.titulo} · ${formatarMoeda(proximaConta.valor)}`
-                    : 'Nenhuma conta cadastrada.'
-                }
-                meta={
-                  proximaConta
-                    ? `${formatarData(proximaConta.proximoVencimento || proximaConta.vencimento)} · ${resumirUrgenciaConta(proximaConta).label}`
-                    : 'Cadastre uma conta para acompanhar o financeiro.'
-                }
-              />
-              <InsightCard
-                title="Proxima assembleia"
-                description={
-                  proximaAssembleia
-                    ? proximaAssembleia.titulo
-                    : 'Nenhuma assembleia agendada.'
-                }
-                meta={
-                  proximaAssembleia
-                    ? `${formatarData(proximaAssembleia.data)} · faltam ${calcularDiasParaData(proximaAssembleia.data)} dia(s)`
-                    : 'Cadastre o calendario de assembleias.'
-                }
-              />
-            </div>
+            {/* Contas */}
+            <ContentPanel title="Contas" actionLabel="Nova conta" actionOpen={painelAberto === 'conta'} onActionToggle={() => setPainelAberto((a) => (a === 'conta' ? '' : 'conta'))}>
+              {painelAberto === 'conta' && (
+                <InlineFormWrap>
+                  <FormPanel title="Nova conta" onSubmit={cadastrarConta} compact>
+                    <Field label="Titulo"><input value={contaForm.titulo} onChange={(e) => atualizarForm(setContaForm, 'titulo', e.target.value)} className={inputClass} required /></Field>
+                    <Field label="Categoria"><input value={contaForm.categoria} onChange={(e) => atualizarForm(setContaForm, 'categoria', e.target.value)} className={inputClass} required /></Field>
+                    <Field label="Valor"><input type="number" step="0.01" value={contaForm.valor} onChange={(e) => atualizarForm(setContaForm, 'valor', e.target.value)} className={inputClass} required /></Field>
+                    <Field label="Vencimento"><input type="date" value={contaForm.vencimento} onChange={(e) => atualizarForm(setContaForm, 'vencimento', e.target.value)} className={inputClass} required /></Field>
+                    <Field label="Status"><select value={contaForm.status} onChange={(e) => atualizarForm(setContaForm, 'status', e.target.value)} className={inputClass}><option>Pendente</option><option>Agendada</option><option>Paga</option></select></Field>
+                    <Field label="Recorrencia"><select value={contaForm.recorrencia} onChange={(e) => atualizarForm(setContaForm, 'recorrencia', e.target.value)} className={inputClass}><option value="nenhuma">Conta avulsa</option><option value="mensal-indeterminada">Todo mes por tempo indeterminado</option></select></Field>
+                    {contaForm.recorrencia === 'mensal-indeterminada' && <Field label="Dia fixo do vencimento"><input type="number" min="1" max="31" value={contaForm.diaVencimento} onChange={(e) => atualizarForm(setContaForm, 'diaVencimento', e.target.value)} className={inputClass} required /></Field>}
+                    <SubmitButton label="Salvar conta" />
+                  </FormPanel>
+                </InlineFormWrap>
+              )}
+              {contasNormalizadas.length === 0 ? <EmptyState text="Nenhuma conta cadastrada." /> : contasNormalizadas.slice(0, 3).map((conta) => (
+                <button key={conta.id} onClick={() => abrirModal(conta, 'conta')} className="w-full flex items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--soft)] p-3 hover:bg-blue-50 hover:border-blue-200 transition text-left active:scale-95">
+                  <div className="min-w-0">
+                    <p className="font-medium text-[var(--ink)] truncate">{conta.titulo}</p>
+                    <p className="text-xs text-[var(--muted)]">Vence {formatarData(conta.proximoVencimento || conta.vencimento)} · {formatarMoeda(conta.valor)}</p>
+                  </div>
+                  <StatusPill tone={resumirUrgenciaConta(conta).tone}>{resumirUrgenciaConta(conta).label}</StatusPill>
+                </button>
+              ))}
+              {contasNormalizadas.length > 3 && <button type="button" onClick={() => abrirSecao('contas')} className="w-full rounded-2xl border border-dashed border-[var(--line)] py-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--soft)]">Ver todas as {contasNormalizadas.length} contas →</button>}
+            </ContentPanel>
 
-            <ContentPanel
-              title="Manutenções"
-              actionLabel="Nova manutenção"
-              actionOpen={painelAberto === 'manutencao'}
-              onActionToggle={() => setPainelAberto((a) => (a === 'manutencao' ? '' : 'manutencao'))}
-            >
-              {painelAberto === 'manutencao' ? (
+            {/* Manutenções */}
+            <ContentPanel title="Manutenções" actionLabel="Nova manutenção" actionOpen={painelAberto === 'manutencao'} onActionToggle={() => setPainelAberto((a) => (a === 'manutencao' ? '' : 'manutencao'))}>
+              {painelAberto === 'manutencao' && (
                 <InlineFormWrap>
                   <FormPanel title="Nova manutenção" onSubmit={cadastrarManutencao} compact>
-                    <Field label="Título">
-                      <input value={manutencaoForm.titulo} onChange={(e) => atualizarForm(setManutencaoForm, 'titulo', e.target.value)} className={inputClass} required />
-                    </Field>
-                    <Field label="Tipo">
-                      <select value={manutencaoForm.tipo} onChange={(e) => atualizarForm(setManutencaoForm, 'tipo', e.target.value)} className={inputClass}>
-                        <option value="Programada">Programada — se repete</option>
-                        <option value="Corretiva">Corretiva — ocorrência pontual</option>
-                      </select>
-                    </Field>
-                    {manutencaoForm.tipo === 'Programada' && (
-                      <>
-                        <Field label="Frequência">
-                          <select value={manutencaoForm.frequencia} onChange={(e) => atualizarForm(setManutencaoForm, 'frequencia', e.target.value)} className={inputClass}>
-                            {frequenciasManutencao.map((f) => <option key={f}>{f}</option>)}
-                          </select>
-                        </Field>
-                        <Field label="Intervalo em meses">
-                          <input type="number" min="1" value={manutencaoForm.intervalMeses} onChange={(e) => atualizarForm(setManutencaoForm, 'intervalMeses', e.target.value)} className={inputClass} />
-                        </Field>
-                      </>
-                    )}
-                    <Field label="Próxima data">
-                      <input type="date" value={manutencaoForm.proximaData} onChange={(e) => atualizarForm(setManutencaoForm, 'proximaData', e.target.value)} className={inputClass} />
-                    </Field>
-                    <Field label="Responsável">
-                      <input value={manutencaoForm.responsavel} onChange={(e) => atualizarForm(setManutencaoForm, 'responsavel', e.target.value)} className={inputClass} required />
-                    </Field>
-                    <Field label="Status">
-                      <select value={manutencaoForm.status} onChange={(e) => atualizarForm(setManutencaoForm, 'status', e.target.value)} className={inputClass}>
-                        <option>Programada</option>
-                        <option>Agendada</option>
-                        <option>Pendente</option>
-                        <option>Concluída</option>
-                        <option>Não realizada</option>
-                      </select>
-                    </Field>
+                    <Field label="Título"><input value={manutencaoForm.titulo} onChange={(e) => atualizarForm(setManutencaoForm, 'titulo', e.target.value)} className={inputClass} required /></Field>
+                    <Field label="Tipo"><select value={manutencaoForm.tipo} onChange={(e) => atualizarForm(setManutencaoForm, 'tipo', e.target.value)} className={inputClass}><option value="Programada">Programada</option><option value="Corretiva">Corretiva</option></select></Field>
+                    {manutencaoForm.tipo === 'Programada' && <><Field label="Frequência"><select value={manutencaoForm.frequencia} onChange={(e) => atualizarForm(setManutencaoForm, 'frequencia', e.target.value)} className={inputClass}>{frequenciasManutencao.map((f) => <option key={f}>{f}</option>)}</select></Field><Field label="Intervalo em meses"><input type="number" min="1" value={manutencaoForm.intervalMeses} onChange={(e) => atualizarForm(setManutencaoForm, 'intervalMeses', e.target.value)} className={inputClass} /></Field></>}
+                    <Field label="Próxima data"><input type="date" value={manutencaoForm.proximaData} onChange={(e) => atualizarForm(setManutencaoForm, 'proximaData', e.target.value)} className={inputClass} /></Field>
+                    <Field label="Responsável"><input value={manutencaoForm.responsavel} onChange={(e) => atualizarForm(setManutencaoForm, 'responsavel', e.target.value)} className={inputClass} required /></Field>
+                    <Field label="Status"><select value={manutencaoForm.status} onChange={(e) => atualizarForm(setManutencaoForm, 'status', e.target.value)} className={inputClass}><option>Programada</option><option>Agendada</option><option>Pendente</option><option>Concluída</option><option>Não realizada</option></select></Field>
                     <SubmitButton label="Salvar manutenção" />
                   </FormPanel>
                 </InlineFormWrap>
-              ) : null}
-              {condominio.manutencoes.length === 0 ? (
-                <EmptyState text="Nenhuma manutenção cadastrada." />
-              ) : (
-                condominio.manutencoes.map((item) => (
-                  <div key={item.id} className="rounded-2xl border border-[var(--line)] bg-[var(--soft)] p-4">
-                    {manutencaoEditando === item.id ? (
-                      <form onSubmit={salvarEdicaoManutencao} className="space-y-3">
-                        <Field label="Título">
-                          <input value={manutencaoEditForm.titulo} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, titulo: e.target.value }))} className={inputClass} required />
-                        </Field>
-                        <Field label="Tipo">
-                          <select value={manutencaoEditForm.tipo} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, tipo: e.target.value }))} className={inputClass}>
-                            <option value="Programada">Programada</option>
-                            <option value="Corretiva">Corretiva</option>
-                          </select>
-                        </Field>
-                        {manutencaoEditForm.tipo === 'Programada' && (
-                          <Field label="Intervalo em meses">
-                            <input type="number" min="1" value={manutencaoEditForm.intervalMeses} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, intervalMeses: e.target.value }))} className={inputClass} />
-                          </Field>
-                        )}
-                        <Field label="Próxima data">
-                          <input type="date" value={manutencaoEditForm.proximaData} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, proximaData: e.target.value }))} className={inputClass} />
-                        </Field>
-                        <Field label="Responsável">
-                          <input value={manutencaoEditForm.responsavel} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, responsavel: e.target.value }))} className={inputClass} />
-                        </Field>
-                        <Field label="Status">
-                          <select value={manutencaoEditForm.status} onChange={(e) => setManutencaoEditForm((f) => ({ ...f, status: e.target.value }))} className={inputClass}>
-                            <option>Programada</option>
-                            <option>Agendada</option>
-                            <option>Pendente</option>
-                            <option>Concluída</option>
-                            <option>Não realizada</option>
-                          </select>
-                        </Field>
-                        <div className="flex gap-2">
-                          <SubmitButton label="Salvar" />
-                          <button type="button" onClick={() => setManutencaoEditando(null)} className="w-full rounded-full border border-slate-300 bg-white py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">Cancelar</button>
-                        </div>
-                      </form>
-                    ) : (
-                      <>
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-medium text-[var(--ink)]">{item.titulo}</p>
-                            <p className="text-xs text-[var(--muted)] mt-0.5">
-                              {item.tipo === 'Corretiva' ? 'Corretiva' : `Programada${item.intervalMeses ? ` · a cada ${item.intervalMeses} mês(es)` : ''}`}
-                              {item.frequencia ? ` · ${item.frequencia}` : ''}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <StatusBadge status={item.status} />
-                            <button type="button" onClick={() => abrirEdicaoManutencao(item)} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[var(--accent-strong)] ring-1 ring-slate-200 transition hover:bg-slate-50">Editar</button>
-                            <button type="button" onClick={() => { setHistoricoAberto(historicoAberto === item.id ? null : item.id); setHistoricoForm({ data: '', status: 'Concluída', executor: '', observacao: '' }) }} className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200 transition hover:bg-emerald-100">Histórico</button>
-                            <button type="button" onClick={() => excluirManutencao(item.id)} className="text-xs font-semibold text-red-400 hover:text-red-600">Excluir</button>
-                          </div>
-                        </div>
-                        <div className="mt-2 text-sm text-[var(--muted)]">
-                          {item.proximaData ? `Próxima: ${formatarData(item.proximaData)}` : 'Sem data definida'}
-                          {item.responsavel ? ` · ${item.responsavel}` : ''}
-                        </div>
-                        {historicoAberto === item.id && (
-                          <div className="mt-3 rounded-2xl border border-[var(--line)] bg-white p-4 space-y-3">
-                            <p className="text-sm font-semibold text-[var(--ink)]">Registrar execução</p>
-                            <form onSubmit={(e) => registrarHistorico(e, item.id)} className="space-y-2">
-                              <div className="grid gap-2 sm:grid-cols-2">
-                                <Field label="Data">
-                                  <input type="date" value={historicoForm.data} onChange={(e) => setHistoricoForm((f) => ({ ...f, data: e.target.value }))} className={inputClass} required />
-                                </Field>
-                                <Field label="Status">
-                                  <select value={historicoForm.status} onChange={(e) => setHistoricoForm((f) => ({ ...f, status: e.target.value }))} className={inputClass}>
-                                    <option>Concluída</option>
-                                    <option>Não realizada</option>
-                                    <option>Parcial</option>
-                                  </select>
-                                </Field>
-                              </div>
-                              <Field label="Executor">
-                                <input value={historicoForm.executor} onChange={(e) => setHistoricoForm((f) => ({ ...f, executor: e.target.value }))} className={inputClass} placeholder="Nome do técnico ou empresa" />
-                              </Field>
-                              <Field label="Observação">
-                                <input value={historicoForm.observacao} onChange={(e) => setHistoricoForm((f) => ({ ...f, observacao: e.target.value }))} className={inputClass} placeholder="Opcional" />
-                              </Field>
-                              <SubmitButton label="Salvar registro" />
-                            </form>
-                            {(item.historico || []).length > 0 && (
-                              <div className="mt-3 space-y-2">
-                                <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">Registros anteriores</p>
-                                {(item.historico || []).map((h) => (
-                                  <div key={h.id} className="rounded-xl bg-slate-50 px-3 py-2 text-sm">
-                                    <div className="flex items-center justify-between">
-                                      <span className="font-medium text-[var(--ink)]">{formatarData(h.data)}</span>
-                                      <StatusBadge status={h.status} />
-                                    </div>
-                                    {h.executor && <p className="mt-1 text-[var(--muted)]">Executor: {h.executor}</p>}
-                                    {h.observacao && <p className="mt-0.5 text-[var(--muted)]">{h.observacao}</p>}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                ))
               )}
+              {condominio.manutencoes.length === 0 ? <EmptyState text="Nenhuma manutenção cadastrada." /> : condominio.manutencoes.slice(0, 3).map((item) => (
+                <button key={item.id} onClick={() => abrirModal(item, 'manutencao')} className="w-full flex items-center justify-between rounded-2xl border border-[var(--line)] bg-[var(--soft)] p-3 hover:bg-blue-50 hover:border-blue-200 transition text-left active:scale-95">
+                  <div className="min-w-0">
+                    <p className="font-medium text-[var(--ink)] truncate">{item.titulo}</p>
+                    <p className="text-xs text-[var(--muted)]">{item.proximaData ? `Próxima: ${formatarData(item.proximaData)}` : 'Sem data'} · {item.responsavel || '—'}</p>
+                  </div>
+                  <StatusBadge status={item.status} />
+                </button>
+              ))}
+              {condominio.manutencoes.length > 3 && <button type="button" onClick={() => abrirSecao('manutencoes')} className="w-full rounded-2xl border border-dashed border-[var(--line)] py-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--soft)]">Ver todas as {condominio.manutencoes.length} manutenções →</button>}
             </ContentPanel>
+
+            {/* Avisos */}
+            <ContentPanel title="Avisos" actionLabel="Novo aviso" actionOpen={painelAberto === 'aviso'} onActionToggle={() => setPainelAberto((a) => (a === 'aviso' ? '' : 'aviso'))}>
+              {painelAberto === 'aviso' && (
+                <InlineFormWrap>
+                  <FormPanel title="Novo aviso" onSubmit={cadastrarAviso} compact>
+                    <Field label="Titulo"><input value={avisoForm.titulo} onChange={(e) => atualizarForm(setAvisoForm, 'titulo', e.target.value)} className={inputClass} required /></Field>
+                    <Field label="Data"><input type="date" value={avisoForm.data} onChange={(e) => atualizarForm(setAvisoForm, 'data', e.target.value)} className={inputClass} required /></Field>
+                    <Field label="Descricao"><textarea value={avisoForm.descricao} onChange={(e) => atualizarForm(setAvisoForm, 'descricao', e.target.value)} className={`${inputClass} min-h-20`} required /></Field>
+                    <SubmitButton label="Salvar aviso" />
+                  </FormPanel>
+                </InlineFormWrap>
+              )}
+              {condominio.avisos.length === 0 ? <EmptyState text="Nenhum aviso cadastrado." /> : condominio.avisos.slice(0, 3).map((aviso) => (
+                <button key={aviso.id} onClick={() => abrirModal(aviso, 'aviso')} className="w-full rounded-2xl border border-[var(--line)] bg-[var(--soft)] p-3 hover:bg-blue-50 hover:border-blue-200 transition text-left active:scale-95">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-[var(--ink)] truncate">{aviso.titulo}</p>
+                    <p className="shrink-0 text-xs text-[var(--muted)]">{formatarData(aviso.data)}</p>
+                  </div>
+                  <p className="mt-1 text-xs text-[var(--muted)] line-clamp-2">{aviso.descricao}</p>
+                </button>
+              ))}
+              {condominio.avisos.length > 3 && <button type="button" onClick={() => abrirSecao('avisos')} className="w-full rounded-2xl border border-dashed border-[var(--line)] py-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--soft)]">Ver todos os {condominio.avisos.length} avisos →</button>}
+            </ContentPanel>
+
+            {/* Assembleias */}
+            <ContentPanel title="Assembleias" actionLabel="Nova assembleia" actionOpen={painelAberto === 'assembleia'} onActionToggle={() => setPainelAberto((a) => (a === 'assembleia' ? '' : 'assembleia'))}>
+              {painelAberto === 'assembleia' && (
+                <InlineFormWrap>
+                  <FormPanel title="Nova assembleia" onSubmit={cadastrarAssembleia} compact>
+                    <Field label="Titulo"><input value={assembleiaForm.titulo} onChange={(e) => atualizarForm(setAssembleiaForm, 'titulo', e.target.value)} className={inputClass} required /></Field>
+                    <Field label="Data"><input type="date" value={assembleiaForm.data} onChange={(e) => atualizarForm(setAssembleiaForm, 'data', e.target.value)} className={inputClass} required /></Field>
+                    <Field label="Horario"><input type="time" value={assembleiaForm.horario} onChange={(e) => atualizarForm(setAssembleiaForm, 'horario', e.target.value)} className={inputClass} required /></Field>
+                    <Field label="Local"><input value={assembleiaForm.local} onChange={(e) => atualizarForm(setAssembleiaForm, 'local', e.target.value)} className={inputClass} required /></Field>
+                    <Field label="Pauta"><textarea value={assembleiaForm.pauta} onChange={(e) => atualizarForm(setAssembleiaForm, 'pauta', e.target.value)} className={`${inputClass} min-h-20`} required /></Field>
+                    <SubmitButton label="Salvar assembleia" />
+                  </FormPanel>
+                </InlineFormWrap>
+              )}
+              {!condominio.assembleias?.length ? <EmptyState text="Nenhuma assembleia cadastrada." /> : condominio.assembleias.slice(0, 3).map((a) => (
+                <div key={a.id} className="rounded-2xl border border-[var(--line)] bg-[var(--soft)] p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-[var(--ink)] truncate">{a.titulo}</p>
+                    <p className="shrink-0 text-xs text-[var(--muted)]">{formatarData(a.data)}{a.horario ? ` · ${a.horario}` : ''}</p>
+                  </div>
+                  {a.local && <p className="mt-1 text-xs text-[var(--muted)]">Local: {a.local}</p>}
+                </div>
+              ))}
+              {(condominio.assembleias?.length || 0) > 3 && <button type="button" onClick={() => abrirSecao('assembleias')} className="w-full rounded-2xl border border-dashed border-[var(--line)] py-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--soft)]">Ver todas as {condominio.assembleias.length} assembleias →</button>}
+            </ContentPanel>
+
           </section>
         ) : null}
 
@@ -1119,6 +1117,87 @@ export default function CondominioPage() {
         </section>
         ) : null}
 
+        {secaoAtiva === 'visitas' ? (
+        <section id="visitas">
+          <ContentPanel
+            title="Visitas realizadas"
+            actionLabel="Fazer check-in agora"
+            actionOpen={false}
+            onActionToggle={fazerCheckin}
+          >
+            {!(condominio.visitas || []).length ? (
+              <EmptyState text="Nenhuma visita registrada. Clique em 'Fazer check-in agora' para registrar sua visita." />
+            ) : (
+              <div className="space-y-3">
+                {(condominio.visitas || []).map((v) => (
+                  <div key={v.id} className={`rounded-2xl border p-4 ${
+                    v.tipo === 'urgencia'
+                      ? 'border-red-200 bg-red-50'
+                      : 'border-[var(--line)] bg-[var(--soft)]'
+                  }`}>
+                    {visitaEditando === v.id ? (
+                      <form onSubmit={salvarEdicaoVisita} className="space-y-3">
+                        <Field label="Tipo de visita">
+                          <select value={visitaEditForm.tipo} onChange={(e) => setVisitaEditForm((f) => ({ ...f, tipo: e.target.value, motivo: '' }))} className={inputClass}>
+                            <option value="normal">Diária normal</option>
+                            <option value="urgencia">Urgência</option>
+                          </select>
+                        </Field>
+                        {visitaEditForm.tipo === 'urgencia' && (
+                          <Field label="Motivo da urgência">
+                            <input value={visitaEditForm.motivo} onChange={(e) => setVisitaEditForm((f) => ({ ...f, motivo: e.target.value }))} className={inputClass} placeholder="Ex: Cano estourado, falta de energia..." required />
+                          </Field>
+                        )}
+                        <Field label="Observação adicional">
+                          <input value={visitaEditForm.observacao} onChange={(e) => setVisitaEditForm((f) => ({ ...f, observacao: e.target.value }))} className={inputClass} placeholder="Opcional" />
+                        </Field>
+                        <div className="flex gap-2">
+                          <SubmitButton label="Salvar edição" />
+                          <button type="button" onClick={() => setVisitaEditando(null)} className="w-full rounded-full border border-slate-300 bg-white py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">Cancelar</button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium text-[var(--ink)]">👤 {v.usuario}</p>
+                            {v.tipo === 'urgencia'
+                              ? <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">⚠️ Urgência</span>
+                              : <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">✅ Rotina</span>
+                            }
+                          </div>
+                          <p className="mt-1 text-sm text-[var(--muted)]">
+                            {formatarData(v.data)}{v.hora ? ` · ${v.hora}` : ''}
+                          </p>
+                          {v.motivo && v.tipo === 'urgencia' && (
+                            <p className="mt-1 text-sm font-medium text-red-700">Motivo: {v.motivo}</p>
+                          )}
+                          {v.observacao && (
+                            <p className="mt-1 text-sm text-[var(--muted)]">Obs: {v.observacao}</p>
+                          )}
+                          {v.editadoPor && (
+                            <p className="mt-1 text-xs text-[var(--muted)]">✏️ Editado por {v.editadoPor}</p>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-3">
+                          <button type="button" onClick={() => abrirEdicaoVisita(v)} className="text-xs font-semibold text-[var(--accent-strong)] hover:underline">Editar</button>
+                          <button type="button" onClick={() => removerVisita(v.id)} className="text-xs font-semibold text-red-400 hover:text-red-600">Excluir</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-[var(--muted)]">
+                  Total de visitas: <strong>{(condominio.visitas || []).length}</strong>
+                  {' · '}
+                  Urgências: <strong className="text-red-600">{(condominio.visitas || []).filter(v => v.tipo === 'urgencia').length}</strong>
+                </div>
+              </div>
+            )}
+          </ContentPanel>
+        </section>
+        ) : null}
+
         {secaoAtiva === 'lembretes' ? (
         <section id="lembretes">
           <ContentPanel title="Lembretes do condomínio">
@@ -1139,6 +1218,89 @@ export default function CondominioPage() {
         ) : null}
       </div>
     </AdminShell>
+
+    {modal && <DetalheModal item={modal.item} tipo={modal.tipo} slug={condominio.slug} onClose={fecharModal} onSaved={fecharModal} />}
+
+    {modalVisita && (
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 px-4"
+        onClick={(e) => e.target === e.currentTarget && setModalVisita(false)}
+      >
+        <div className="w-full max-w-xs rounded-2xl bg-white shadow-2xl overflow-hidden">
+
+          {/* Topo */}
+          <div className="flex items-center justify-between bg-[var(--panel-strong)] px-4 py-2.5">
+            <div>
+              <p className="text-xs font-bold text-white leading-tight">{nomeUsuario}</p>
+              <p className="text-[10px] text-white/50">{new Date().toLocaleDateString('pt-BR')} · {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</p>
+            </div>
+            <button type="button" onClick={() => setModalVisita(false)} className="flex h-6 w-6 items-center justify-center rounded-full bg-white/15 text-white text-base leading-none">×</button>
+          </div>
+
+          <div className="px-4 py-3 space-y-3">
+            {/* Tipo */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => { setVisitaTipo('normal'); setVisitaMotivo('') }}
+                className={`rounded-xl border-2 px-2 py-2 text-center active:scale-95 transition ${
+                  visitaTipo === 'normal' ? 'border-blue-400 bg-blue-50' : 'border-slate-200 bg-slate-50'
+                }`}
+              >
+                <p className="text-base">🗓️</p>
+                <p className="text-xs font-semibold text-[var(--ink)] mt-0.5">Normal</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setVisitaTipo('urgencia')}
+                className={`rounded-xl border-2 px-2 py-2 text-center active:scale-95 transition ${
+                  visitaTipo === 'urgencia' ? 'border-red-400 bg-red-50' : 'border-slate-200 bg-slate-50'
+                }`}
+              >
+                <p className="text-base">⚠️</p>
+                <p className="text-xs font-semibold text-[var(--ink)] mt-0.5">Urgência</p>
+              </button>
+            </div>
+
+            {/* Motivo */}
+            {visitaTipo === 'urgencia' && (
+              <input
+                type="text"
+                value={visitaMotivo}
+                onChange={(e) => setVisitaMotivo(e.target.value)}
+                placeholder="Descreva o motivo *"
+                className="w-full rounded-xl border-2 border-red-200 bg-red-50 px-3 py-2 text-sm outline-none focus:border-red-400"
+                autoFocus
+              />
+            )}
+
+            {/* Botões */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setModalVisita(false)}
+                className="flex-1 rounded-full border border-slate-200 py-2 text-sm font-semibold text-slate-600 active:scale-95"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarCheckin}
+                disabled={visitaTipo === 'urgencia' && !visitaMotivo.trim()}
+                className={`flex-1 rounded-full py-2 text-sm font-semibold text-white active:scale-95 transition ${
+                  visitaTipo === 'urgencia'
+                    ? 'bg-red-500 disabled:opacity-40'
+                    : 'bg-[var(--panel-strong)]'
+                }`}
+              >
+                {visitaTipo === 'urgencia' ? 'Registrar' : 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+  </>
   )
 }
 
@@ -1260,7 +1422,9 @@ function EmptyState({ text }) {
 function StatusBadge({ status }) {
   const cls =
     status === 'Concluída' ? 'bg-emerald-100 text-emerald-700'
-    : status === 'Não realizada' ? 'bg-red-100 text-red-700'
+    : status === 'Pago' || status === 'Paga' ? 'bg-emerald-100 text-emerald-700'
+    : status === 'Não realizada' || status === 'Atrasada' ? 'bg-red-100 text-red-700'
+    : status === 'Pendente' ? 'bg-amber-100 text-amber-700'
     : status === 'Agendada' ? 'bg-blue-100 text-blue-700'
     : status === 'Programada' ? 'bg-cyan-100 text-cyan-700'
     : 'bg-slate-100 text-slate-600'
@@ -1271,14 +1435,10 @@ function StatusBadge({ status }) {
 
 function StatusPill({ tone, children }) {
   const toneClass =
-    tone === 'red'
-      ? 'bg-red-100 text-red-700'
-      : tone === 'amber'
-        ? 'bg-amber-100 text-amber-700'
-        : tone === 'emerald'
-          ? 'bg-emerald-100 text-emerald-700'
-          : 'bg-slate-100 text-slate-700'
-
+    tone === 'red' ? 'bg-red-100 text-red-700'
+    : tone === 'amber' ? 'bg-amber-100 text-amber-700'
+    : tone === 'emerald' ? 'bg-emerald-100 text-emerald-700'
+    : 'bg-slate-100 text-slate-700'
   return (
     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${toneClass}`}>
       {children}

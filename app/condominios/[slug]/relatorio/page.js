@@ -2,7 +2,7 @@
 
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { buscarCondominioPorSlug, formatarData, formatarMoeda, normalizarConta, resumirUrgenciaConta } from '@/lib/condominios'
+import { buscarCondominioPorSlug, formatarData, formatarMoeda, normalizarConta, resumirUrgenciaConta } from '@/controllers/condominio'
 
 export default function RelatorioPage() {
   const params = useParams()
@@ -19,7 +19,7 @@ export default function RelatorioPage() {
   }
 
   const contasNormalizadas = condominio.contas.map(normalizarConta)
-  const manutencoesPendentes = condominio.manutencoes.filter((m) => m.status !== 'Concluída')
+  const visitas = condominio.visitas || []
   const hoje = new Date().toLocaleDateString('pt-BR')
 
   return (
@@ -92,35 +92,87 @@ export default function RelatorioPage() {
           )}
         </section>
 
-        {/* Manutenções */}
+        {/* Manutenções realizadas */}
         <section className="mt-8">
-          <h2 className="text-base font-bold uppercase tracking-wider text-[#1a3a5c]">Manutenções pendentes</h2>
-          {manutencoesPendentes.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-400">Nenhuma manutenção pendente.</p>
-          ) : (
-            <table className="mt-3 w-full text-sm border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wider text-slate-500">
-                  <th className="py-2 pr-4">Título</th>
-                  <th className="py-2 pr-4">Frequência</th>
-                  <th className="py-2 pr-4">Próxima data</th>
-                  <th className="py-2 pr-4">Responsável</th>
-                  <th className="py-2">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {manutencoesPendentes.map((m) => (
-                  <tr key={m.id} className="border-b border-slate-100">
-                    <td className="py-2 pr-4 font-medium">{m.titulo}</td>
-                    <td className="py-2 pr-4 text-slate-500">{m.frequencia || '—'}</td>
-                    <td className="py-2 pr-4">{m.proximaData ? formatarData(m.proximaData) : '—'}</td>
-                    <td className="py-2 pr-4 text-slate-500">{m.responsavel || '—'}</td>
-                    <td className="py-2 text-xs font-semibold text-slate-600">{m.status}</td>
+          <h2 className="text-base font-bold uppercase tracking-wider text-[#1a3a5c]">Manutenções realizadas</h2>
+          {(() => {
+            const realizadas = condominio.manutencoes.filter((m) => (m.historico || []).length > 0)
+            if (realizadas.length === 0) return <p className="mt-3 text-sm text-slate-400">Nenhuma manutenção com histórico de execução.</p>
+            return (
+              <table className="mt-3 w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wider text-slate-500">
+                    <th className="py-2 pr-4">Manutenção</th>
+                    <th className="py-2 pr-4">Data</th>
+                    <th className="py-2 pr-4">Executor</th>
+                    <th className="py-2 pr-4">Status</th>
+                    <th className="py-2">Observação</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                </thead>
+                <tbody>
+                  {realizadas.flatMap((m) =>
+                    (m.historico || []).map((h) => (
+                      <tr key={h.id} className="border-b border-slate-100">
+                        <td className="py-2 pr-4 font-medium">{m.titulo}</td>
+                        <td className="py-2 pr-4">{formatarData(h.data)}</td>
+                        <td className="py-2 pr-4 text-slate-500">{h.executor || '—'}</td>
+                        <td className="py-2 pr-4">
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            h.status === 'Concluída' ? 'bg-emerald-100 text-emerald-700'
+                            : h.status === 'Não realizada' ? 'bg-red-100 text-red-700'
+                            : 'bg-amber-100 text-amber-700'
+                          }`}>{h.status}</span>
+                        </td>
+                        <td className="py-2 text-slate-500">{h.observacao || '—'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )
+          })()}
+        </section>
+
+        {/* Próximas manutenções */}
+        <section className="mt-8">
+          <h2 className="text-base font-bold uppercase tracking-wider text-[#1a3a5c]">Próximas manutenções a realizar</h2>
+          {(() => {
+            const proximas = condominio.manutencoes
+              .filter((m) => m.status !== 'Concluída' && m.proximaData)
+              .sort((a, b) => String(a.proximaData).localeCompare(String(b.proximaData)))
+            const semData = condominio.manutencoes.filter((m) => m.status !== 'Concluída' && !m.proximaData)
+            if (proximas.length === 0 && semData.length === 0) return <p className="mt-3 text-sm text-slate-400">Nenhuma manutenção pendente.</p>
+            return (
+              <table className="mt-3 w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wider text-slate-500">
+                    <th className="py-2 pr-4">Título</th>
+                    <th className="py-2 pr-4">Próxima data</th>
+                    <th className="py-2 pr-4">Responsável</th>
+                    <th className="py-2 pr-4">Frequência</th>
+                    <th className="py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...proximas, ...semData].map((m) => (
+                    <tr key={m.id} className="border-b border-slate-100">
+                      <td className="py-2 pr-4 font-medium">{m.titulo}</td>
+                      <td className="py-2 pr-4">{m.proximaData ? formatarData(m.proximaData) : <span className="text-slate-400">Sem data</span>}</td>
+                      <td className="py-2 pr-4 text-slate-500">{m.responsavel || '—'}</td>
+                      <td className="py-2 pr-4 text-slate-500">{m.frequencia || '—'}</td>
+                      <td className="py-2">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                          m.status === 'Agendada' ? 'bg-blue-100 text-blue-700'
+                          : m.status === 'Programada' ? 'bg-cyan-100 text-cyan-700'
+                          : 'bg-amber-100 text-amber-700'
+                        }`}>{m.status}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          })()}
         </section>
 
         {/* Avisos */}
@@ -161,6 +213,52 @@ export default function RelatorioPage() {
                 </div>
               ))}
             </div>
+          )}
+        </section>
+
+        {/* Visitas */}
+        <section className="mt-8">
+          <h2 className="text-base font-bold uppercase tracking-wider text-[#1a3a5c]">Visitas realizadas</h2>
+          {visitas.length === 0 ? (
+            <p className="mt-3 text-sm text-slate-400">Nenhuma visita registrada.</p>
+          ) : (
+            <>
+              <table className="mt-3 w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wider text-slate-500">
+                    <th className="py-2 pr-4">Usuário / Visitante</th>
+                    <th className="py-2 pr-4">Data</th>
+                    <th className="py-2 pr-4">Hora</th>
+                    <th className="py-2 pr-4">Motivo</th>
+                    <th className="py-2">Observação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visitas.map((v) => (
+                    <tr key={v.id} className="border-b border-slate-100">
+                      <td className="py-2 pr-4 font-medium">{v.usuario}</td>
+                      <td className="py-2 pr-4">{formatarData(v.data)}</td>
+                      <td className="py-2 pr-4 text-slate-500">{v.hora || '—'}</td>
+                      <td className="py-2 pr-4 text-slate-500">{v.motivo || '—'}</td>
+                      <td className="py-2 text-slate-500">{v.observacao || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-3 text-sm font-semibold text-slate-700">Total de visitas: {visitas.length}</p>
+              {/* Resumo por usuário */}
+              <div className="mt-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Visitas por usuário</p>
+                {Object.entries(
+                  visitas.reduce((acc, v) => { acc[v.usuario] = (acc[v.usuario] || 0) + 1; return acc }, {})
+                ).map(([usuario, total]) => (
+                  <div key={usuario} className="flex items-center justify-between border-b border-slate-100 py-1.5 text-sm">
+                    <span className="font-medium text-slate-700">{usuario}</span>
+                    <span className="text-slate-500">{total} visita(s)</span>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </section>
 

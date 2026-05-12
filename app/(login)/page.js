@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { signIn, sendPasswordReset, useSession } from '@/lib/useAuth'
+import { signIn, sendPasswordReset, useSession } from '@/controllers/auth'
 
 const RATE_LIMIT_SEGUNDOS = 30
 const MAX_TENTATIVAS = 3

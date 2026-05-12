@@ -8,7 +8,7 @@
  * - Interface para upload e gerenciamento de arquivos
  */
 
-import AdminShell from '@/components/admin-shell'
+import AdminShell from '@/views/components/admin-shell'
 
 const documentos = [
   {

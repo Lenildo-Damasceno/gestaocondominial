@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import AdminShell from '@/components/admin-shell'
-import { formatarData, listarCondominios } from '@/lib/condominios'
+import AdminShell from '@/views/components/admin-shell'
+import { formatarData, listarCondominios } from '@/controllers/condominio'
 
 const STATUS_ALERTA = ['Não realizada', 'Pendente', 'Atrasada']
 

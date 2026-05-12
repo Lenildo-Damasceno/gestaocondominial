@@ -8,7 +8,7 @@
  * - Interface para criar novo chamado e filtrar por status
  */
 
-import AdminShell from '@/components/admin-shell'
+import AdminShell from '@/views/components/admin-shell'
 
 const ocorrencias = [
   {
