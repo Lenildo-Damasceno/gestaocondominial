@@ -23,6 +23,7 @@ import {
   adicionarAvisoAoCondominio,
   adicionarContaAoCondominio,
   adicionarManutencaoAoCondominio,
+  editarContaDoCondominio,
   editarManutencaoDoCondominio,
   excluirManutencaoDoCondominio,
   excluirContaDoCondominio,
@@ -84,12 +85,38 @@ export default function CondominioPage() {
     local: '',
     pauta: '',
   })
+  const [contaEditando, setContaEditando] = useState(null)
+  const [contaEditForm, setContaEditForm] = useState({})
   const [modalVisita, setModalVisita] = useState(false)
   const [visitaTipo, setVisitaTipo] = useState('normal')
   const [visitaMotivo, setVisitaMotivo] = useState('')
   const [visitaEditando, setVisitaEditando] = useState(null)
   const [visitaEditForm, setVisitaEditForm] = useState({ tipo: 'normal', motivo: '', observacao: '' })
   const [modal, setModal] = useState(null)
+  
+  // Estados de filtros
+  const [filtroContaNome, setFiltroContaNome] = useState('')
+  const [filtroContaStatus, setFiltroContaStatus] = useState('todos')
+  const [filtroContaDataInicio, setFiltroContaDataInicio] = useState('')
+  const [filtroContaDataFim, setFiltroContaDataFim] = useState('')
+  
+  const [filtroManutencaoNome, setFiltroManutencaoNome] = useState('')
+  const [filtroManutencaoStatus, setFiltroManutencaoStatus] = useState('todos')
+  const [filtroManutencaoDataInicio, setFiltroManutencaoDataInicio] = useState('')
+  const [filtroManutencaoDataFim, setFiltroManutencaoDataFim] = useState('')
+  
+  const [filtroAvisoNome, setFiltroAvisoNome] = useState('')
+  const [filtroAvisoDataInicio, setFiltroAvisoDataInicio] = useState('')
+  const [filtroAvisoDataFim, setFiltroAvisoDataFim] = useState('')
+  
+  const [filtroAssembleiaNome, setFiltroAssembleiaNome] = useState('')
+  const [filtroAssembleiaDataInicio, setFiltroAssembleiaDataInicio] = useState('')
+  const [filtroAssembleiaDataFim, setFiltroAssembleiaDataFim] = useState('')
+  
+  const [filtroVisitaNome, setFiltroVisitaNome] = useState('')
+  const [filtroVisitaTipo, setFiltroVisitaTipo] = useState('todos')
+  const [filtroVisitaDataInicio, setFiltroVisitaDataInicio] = useState('')
+  const [filtroVisitaDataFim, setFiltroVisitaDataFim] = useState('')
 
   function abrirModal(item, tipo) { setModal({ item, tipo }) }
   function fecharModal() { setModal(null); forceRefresh() }
@@ -196,6 +223,26 @@ export default function CondominioPage() {
     registrarHistoricoManutencao(condominio.slug, manutencaoId, historicoForm)
     setHistoricoAberto(null)
     setHistoricoForm({ data: '', status: 'Concluída', executor: '', observacao: '' })
+    forceRefresh()
+  }
+
+  function abrirEdicaoConta(conta) {
+    setContaEditando(conta.id)
+    setContaEditForm({
+      titulo: conta.titulo,
+      categoria: conta.categoria,
+      valor: conta.valor,
+      vencimento: conta.vencimento,
+      status: conta.status,
+      recorrencia: conta.recorrencia || 'nenhuma',
+      diaVencimento: conta.diaVencimento || '15',
+    })
+  }
+
+  function salvarEdicaoConta(event) {
+    event.preventDefault()
+    editarContaDoCondominio(condominio.slug, contaEditando, contaEditForm)
+    setContaEditando(null)
     forceRefresh()
   }
 
@@ -341,6 +388,76 @@ export default function CondominioPage() {
     map[item.frequencia].push(item)
     return map
   }, {})
+
+  // Funções de filtro
+  const filtrarPorNome = (item, filtro, campo = 'titulo') => {
+    if (!filtro) return true
+    return item[campo]?.toLowerCase().includes(filtro.toLowerCase())
+  }
+
+  const filtrarPorData = (item, dataInicio, dataFim, campoData) => {
+    if (!dataInicio && !dataFim) return true
+    const dataItem = item[campoData]
+    if (!dataItem) return false
+    
+    if (dataInicio && dataItem < dataInicio) return false
+    if (dataFim && dataItem > dataFim) return false
+    return true
+  }
+
+  // Contas filtradas
+  const contasFiltradas = contasNormalizadas.filter((conta) => {
+    if (!filtrarPorNome(conta, filtroContaNome)) return false
+    if (filtroContaStatus !== 'todos' && conta.status !== filtroContaStatus) return false
+    if (!filtrarPorData(conta, filtroContaDataInicio, filtroContaDataFim, 'vencimento')) return false
+    return true
+  })
+
+  // Manutenções filtradas
+  const manutencoesFiltradas = condominio.manutencoes.filter((manutencao) => {
+    if (!filtrarPorNome(manutencao, filtroManutencaoNome)) return false
+    if (filtroManutencaoStatus !== 'todos' && manutencao.status !== filtroManutencaoStatus) return false
+    if (!filtrarPorData(manutencao, filtroManutencaoDataInicio, filtroManutencaoDataFim, 'proximaData')) return false
+    return true
+  })
+
+  const manutencoesProgramadasFiltradas = manutencoesFiltradas.filter(
+    (item) => item.proximaData || item.status === 'Agendada' || item.status === 'Programada'
+  )
+
+  const manutencoesRecorrentesFiltradas = manutencoesFiltradas
+  const manutencoesRecorrentesFiltradasPorFrequencia = manutencoesRecorrentesFiltradas.reduce((map, item) => {
+    if (!map[item.frequencia]) {
+      map[item.frequencia] = []
+    }
+    map[item.frequencia].push(item)
+    return map
+  }, {})
+
+  // Avisos filtrados
+  const avisosFiltrados = condominio.avisos.filter((aviso) => {
+    if (!filtrarPorNome(aviso, filtroAvisoNome)) return false
+    if (!filtrarPorData(aviso, filtroAvisoDataInicio, filtroAvisoDataFim, 'data')) return false
+    return true
+  })
+
+  // Assembleias filtradas
+  const assembleiasFiltradas = (condominio.assembleias || []).filter((assembleia) => {
+    if (!filtrarPorNome(assembleia, filtroAssembleiaNome)) return false
+    if (!filtrarPorData(assembleia, filtroAssembleiaDataInicio, filtroAssembleiaDataFim, 'data')) return false
+    return true
+  })
+
+  // Visitas filtradas
+  const visitasFiltradas = (condominio.visitas || []).filter((visita) => {
+    if (!filtrarPorNome(visita, filtroVisitaNome, 'usuario')) return false
+    if (filtroVisitaTipo !== 'todos' && visita.tipo !== filtroVisitaTipo) return false
+    if (!filtrarPorData(visita, filtroVisitaDataInicio, filtroVisitaDataFim, 'data')) return false
+    return true
+  })
+
+  // Definir lembretes vazio para evitar erro
+  const lembretes = []
 
   const sidebar = (
     <>
@@ -723,6 +840,71 @@ export default function CondominioPage() {
               setPainelAberto((atual) => (atual === 'conta' ? '' : 'conta'))
             }
           >
+            {/* Filtros */}
+            <div className="rounded-2xl border border-blue-200 bg-blue-50/50 p-4 space-y-3">
+              <p className="text-sm font-semibold text-[var(--ink)]">🔍 Filtros de busca</p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Buscar por nome</label>
+                  <input
+                    type="text"
+                    value={filtroContaNome}
+                    onChange={(e) => setFiltroContaNome(e.target.value)}
+                    placeholder="Digite o título..."
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Status</label>
+                  <select
+                    value={filtroContaStatus}
+                    onChange={(e) => setFiltroContaStatus(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400"
+                  >
+                    <option value="todos">Todos</option>
+                    <option value="Pendente">Pendente</option>
+                    <option value="Agendada">Agendada</option>
+                    <option value="Paga">Paga</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Data início</label>
+                  <input
+                    type="date"
+                    value={filtroContaDataInicio}
+                    onChange={(e) => setFiltroContaDataInicio(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Data fim</label>
+                  <input
+                    type="date"
+                    value={filtroContaDataFim}
+                    onChange={(e) => setFiltroContaDataFim(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400"
+                  />
+                </div>
+              </div>
+              {(filtroContaNome || filtroContaStatus !== 'todos' || filtroContaDataInicio || filtroContaDataFim) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFiltroContaNome('')
+                    setFiltroContaStatus('todos')
+                    setFiltroContaDataInicio('')
+                    setFiltroContaDataFim('')
+                  }}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+                >
+                  ✕ Limpar filtros
+                </button>
+              )}
+              <p className="text-xs text-[var(--muted)]">
+                Mostrando <strong>{contasFiltradas.length}</strong> de <strong>{contasNormalizadas.length}</strong> contas
+              </p>
+            </div>
+
             {painelAberto === 'conta' ? (
               <InlineFormWrap>
                 <FormPanel title="Nova conta" onSubmit={cadastrarConta} compact>
@@ -773,34 +955,76 @@ export default function CondominioPage() {
                 </FormPanel>
               </InlineFormWrap>
             ) : null}
-            {contasNormalizadas.length === 0 ? (
-              <EmptyState text="Nenhuma conta cadastrada para este condominio." />
+            {contasFiltradas.length === 0 ? (
+              <EmptyState text={filtroContaNome || filtroContaStatus !== 'todos' || filtroContaDataInicio || filtroContaDataFim ? "Nenhuma conta encontrada com os filtros aplicados." : "Nenhuma conta cadastrada para este condominio."} />
             ) : (
-              contasNormalizadas.map((conta) => (
+              contasFiltradas.map((conta) => (
                 <div
                   key={conta.id}
                   className="rounded-2xl border border-[var(--line)] bg-[var(--soft)] p-4"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="font-medium text-[var(--ink)]">{conta.titulo}</p>
-                      <p className="mt-1 text-sm text-[var(--muted)]">{conta.categoria}</p>
-                    </div>
-                    <p className="font-semibold text-[var(--ink)]">{formatarMoeda(conta.valor)}</p>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between text-sm text-[var(--muted)]">
-                    <span>Vence em {formatarData(conta.proximoVencimento || conta.vencimento)}</span>
-                    <span>{conta.status}</span>
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <StatusPill tone={resumirUrgenciaConta(conta).tone}>
-                      {resumirUrgenciaConta(conta).label}
-                    </StatusPill>
-                    <p className="text-sm text-[var(--muted)]">
-                      {descreverRecorrenciaConta(conta)}
-                    </p>
-                    <button type="button" onClick={() => excluirConta(conta.id)} className="ml-auto text-xs font-semibold text-red-400 hover:text-red-600">Excluir</button>
-                  </div>
+                  {contaEditando === conta.id ? (
+                    <form onSubmit={salvarEdicaoConta} className="space-y-3">
+                      <Field label="Título">
+                        <input value={contaEditForm.titulo} onChange={(e) => setContaEditForm((f) => ({ ...f, titulo: e.target.value }))} className={inputClass} required />
+                      </Field>
+                      <Field label="Categoria">
+                        <input value={contaEditForm.categoria} onChange={(e) => setContaEditForm((f) => ({ ...f, categoria: e.target.value }))} className={inputClass} required />
+                      </Field>
+                      <Field label="Valor">
+                        <input type="number" step="0.01" value={contaEditForm.valor} onChange={(e) => setContaEditForm((f) => ({ ...f, valor: e.target.value }))} className={inputClass} required />
+                      </Field>
+                      <Field label="Vencimento">
+                        <input type="date" value={contaEditForm.vencimento} onChange={(e) => setContaEditForm((f) => ({ ...f, vencimento: e.target.value }))} className={inputClass} required />
+                      </Field>
+                      <Field label="Status">
+                        <select value={contaEditForm.status} onChange={(e) => setContaEditForm((f) => ({ ...f, status: e.target.value }))} className={inputClass}>
+                          <option>Pendente</option>
+                          <option>Agendada</option>
+                          <option>Paga</option>
+                        </select>
+                      </Field>
+                      <Field label="Recorrência">
+                        <select value={contaEditForm.recorrencia} onChange={(e) => setContaEditForm((f) => ({ ...f, recorrencia: e.target.value }))} className={inputClass}>
+                          <option value="nenhuma">Conta avulsa</option>
+                          <option value="mensal-indeterminada">Todo mês por tempo indeterminado</option>
+                        </select>
+                      </Field>
+                      {contaEditForm.recorrencia === 'mensal-indeterminada' && (
+                        <Field label="Dia fixo do vencimento">
+                          <input type="number" min="1" max="31" value={contaEditForm.diaVencimento} onChange={(e) => setContaEditForm((f) => ({ ...f, diaVencimento: e.target.value }))} className={inputClass} required />
+                        </Field>
+                      )}
+                      <div className="flex gap-2">
+                        <SubmitButton label="Salvar" />
+                        <button type="button" onClick={() => setContaEditando(null)} className="w-full rounded-full border border-slate-300 bg-white py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50">Cancelar</button>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="font-medium text-[var(--ink)]">{conta.titulo}</p>
+                          <p className="mt-1 text-sm text-[var(--muted)]">{conta.categoria}</p>
+                        </div>
+                        <p className="font-semibold text-[var(--ink)]">{formatarMoeda(conta.valor)}</p>
+                      </div>
+                      <div className="mt-3 flex items-center justify-between text-sm text-[var(--muted)]">
+                        <span>Vence em {formatarData(conta.proximoVencimento || conta.vencimento)}</span>
+                        <span>{conta.status}</span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <StatusPill tone={resumirUrgenciaConta(conta).tone}>
+                          {resumirUrgenciaConta(conta).label}
+                        </StatusPill>
+                        <p className="text-sm text-[var(--muted)]">
+                          {descreverRecorrenciaConta(conta)}
+                        </p>
+                        <button type="button" onClick={() => abrirEdicaoConta(conta)} className="ml-auto text-xs font-semibold text-[var(--accent-strong)] hover:underline">Editar</button>
+                        <button type="button" onClick={() => excluirConta(conta.id)} className="text-xs font-semibold text-red-400 hover:text-red-600">Excluir</button>
+                      </div>
+                    </>
+                  )}
                 </div>
                 ))
               )}
@@ -818,6 +1042,73 @@ export default function CondominioPage() {
               setPainelAberto((atual) => (atual === 'manutencao' ? '' : 'manutencao'))
             }
           >
+            {/* Filtros */}
+            <div className="rounded-2xl border border-purple-200 bg-purple-50/50 p-4 space-y-3">
+              <p className="text-sm font-semibold text-[var(--ink)]">🔍 Filtros de busca</p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Buscar por título</label>
+                  <input
+                    type="text"
+                    value={filtroManutencaoNome}
+                    onChange={(e) => setFiltroManutencaoNome(e.target.value)}
+                    placeholder="Digite o título..."
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-purple-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Status</label>
+                  <select
+                    value={filtroManutencaoStatus}
+                    onChange={(e) => setFiltroManutencaoStatus(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-purple-400"
+                  >
+                    <option value="todos">Todos</option>
+                    <option value="Programada">Programada</option>
+                    <option value="Agendada">Agendada</option>
+                    <option value="Pendente">Pendente</option>
+                    <option value="Concluída">Concluída</option>
+                    <option value="Não realizada">Não realizada</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Data início</label>
+                  <input
+                    type="date"
+                    value={filtroManutencaoDataInicio}
+                    onChange={(e) => setFiltroManutencaoDataInicio(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-purple-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Data fim</label>
+                  <input
+                    type="date"
+                    value={filtroManutencaoDataFim}
+                    onChange={(e) => setFiltroManutencaoDataFim(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-purple-400"
+                  />
+                </div>
+              </div>
+              {(filtroManutencaoNome || filtroManutencaoStatus !== 'todos' || filtroManutencaoDataInicio || filtroManutencaoDataFim) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFiltroManutencaoNome('')
+                    setFiltroManutencaoStatus('todos')
+                    setFiltroManutencaoDataInicio('')
+                    setFiltroManutencaoDataFim('')
+                  }}
+                  className="text-xs font-semibold text-purple-600 hover:text-purple-800"
+                >
+                  ✕ Limpar filtros
+                </button>
+              )}
+              <p className="text-xs text-[var(--muted)]">
+                Mostrando <strong>{manutencoesFiltradas.length}</strong> de <strong>{condominio.manutencoes.length}</strong> manutenções
+              </p>
+            </div>
+
             <div className="mb-5 flex flex-wrap gap-3">
               <button
                 type="button"
@@ -888,11 +1179,11 @@ export default function CondominioPage() {
             ) : null}
 
             {manutencaoTipo === 'programadas' ? (
-              manutencoesProgramadas.length === 0 ? (
-                <EmptyState text="Nenhuma manutenção programada encontrada para este condomínio." />
+              manutencoesProgramadasFiltradas.length === 0 ? (
+                <EmptyState text={filtroManutencaoNome || filtroManutencaoStatus !== 'todos' || filtroManutencaoDataInicio || filtroManutencaoDataFim ? "Nenhuma manutenção encontrada com os filtros aplicados." : "Nenhuma manutenção programada encontrada para este condomínio."} />
               ) : (
                 <div className="space-y-3">
-                  {manutencoesProgramadas.map((item) => (
+                  {manutencoesProgramadasFiltradas.map((item) => (
                     <div key={item.id} className="rounded-2xl border border-[var(--line)] bg-[var(--soft)] p-4">
                       {manutencaoEditando === item.id ? (
                         <form onSubmit={salvarEdicaoManutencao} className="space-y-3">
@@ -957,7 +1248,7 @@ export default function CondominioPage() {
               )
             ) : (
               <div className="space-y-5">
-                {Object.entries(manutencoesRecorrentesPorFrequencia).map(([frequencia, itens]) => (
+                {Object.entries(manutencoesRecorrentesFiltradasPorFrequencia).map(([frequencia, itens]) => (
                   <div key={frequencia} className="rounded-[1.5rem] border border-[var(--line)] bg-[var(--soft)] p-5">
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-semibold text-[var(--ink)]">{frequencia}</h3>
@@ -1020,6 +1311,57 @@ export default function CondominioPage() {
             actionOpen={painelAberto === 'aviso'}
             onActionToggle={() => setPainelAberto((atual) => (atual === 'aviso' ? '' : 'aviso'))}
           >
+            {/* Filtros */}
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/50 p-4 space-y-3">
+              <p className="text-sm font-semibold text-[var(--ink)]">🔍 Filtros de busca</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Buscar por título</label>
+                  <input
+                    type="text"
+                    value={filtroAvisoNome}
+                    onChange={(e) => setFiltroAvisoNome(e.target.value)}
+                    placeholder="Digite o título..."
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Data início</label>
+                  <input
+                    type="date"
+                    value={filtroAvisoDataInicio}
+                    onChange={(e) => setFiltroAvisoDataInicio(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Data fim</label>
+                  <input
+                    type="date"
+                    value={filtroAvisoDataFim}
+                    onChange={(e) => setFiltroAvisoDataFim(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-amber-400"
+                  />
+                </div>
+              </div>
+              {(filtroAvisoNome || filtroAvisoDataInicio || filtroAvisoDataFim) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFiltroAvisoNome('')
+                    setFiltroAvisoDataInicio('')
+                    setFiltroAvisoDataFim('')
+                  }}
+                  className="text-xs font-semibold text-amber-600 hover:text-amber-800"
+                >
+                  ✕ Limpar filtros
+                </button>
+              )}
+              <p className="text-xs text-[var(--muted)]">
+                Mostrando <strong>{avisosFiltrados.length}</strong> de <strong>{condominio.avisos.length}</strong> avisos
+              </p>
+            </div>
+
             {painelAberto === 'aviso' ? (
               <InlineFormWrap>
                 <FormPanel title="Novo aviso" onSubmit={cadastrarAviso} compact>
@@ -1036,10 +1378,10 @@ export default function CondominioPage() {
                 </FormPanel>
               </InlineFormWrap>
             ) : null}
-            {condominio.avisos.length === 0 ? (
-              <EmptyState text="Nenhum aviso cadastrado para este condominio." />
+            {avisosFiltrados.length === 0 ? (
+              <EmptyState text={filtroAvisoNome || filtroAvisoDataInicio || filtroAvisoDataFim ? "Nenhum aviso encontrado com os filtros aplicados." : "Nenhum aviso cadastrado para este condominio."} />
             ) : (
-              condominio.avisos.map((aviso) => (
+              avisosFiltrados.map((aviso) => (
                 <div
                   key={aviso.id}
                   className="rounded-2xl border border-[var(--line)] bg-[var(--soft)] p-4"
@@ -1069,6 +1411,57 @@ export default function CondominioPage() {
               setPainelAberto((atual) => (atual === 'assembleia' ? '' : 'assembleia'))
             }
           >
+            {/* Filtros */}
+            <div className="rounded-2xl border border-green-200 bg-green-50/50 p-4 space-y-3">
+              <p className="text-sm font-semibold text-[var(--ink)]">🔍 Filtros de busca</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Buscar por título</label>
+                  <input
+                    type="text"
+                    value={filtroAssembleiaNome}
+                    onChange={(e) => setFiltroAssembleiaNome(e.target.value)}
+                    placeholder="Digite o título..."
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-green-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Data início</label>
+                  <input
+                    type="date"
+                    value={filtroAssembleiaDataInicio}
+                    onChange={(e) => setFiltroAssembleiaDataInicio(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-green-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Data fim</label>
+                  <input
+                    type="date"
+                    value={filtroAssembleiaDataFim}
+                    onChange={(e) => setFiltroAssembleiaDataFim(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-green-400"
+                  />
+                </div>
+              </div>
+              {(filtroAssembleiaNome || filtroAssembleiaDataInicio || filtroAssembleiaDataFim) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFiltroAssembleiaNome('')
+                    setFiltroAssembleiaDataInicio('')
+                    setFiltroAssembleiaDataFim('')
+                  }}
+                  className="text-xs font-semibold text-green-600 hover:text-green-800"
+                >
+                  ✕ Limpar filtros
+                </button>
+              )}
+              <p className="text-xs text-[var(--muted)]">
+                Mostrando <strong>{assembleiasFiltradas.length}</strong> de <strong>{(condominio.assembleias || []).length}</strong> assembleias
+              </p>
+            </div>
+
             {painelAberto === 'assembleia' ? (
               <InlineFormWrap>
                 <FormPanel title="Nova assembleia" onSubmit={cadastrarAssembleia} compact>
@@ -1091,8 +1484,8 @@ export default function CondominioPage() {
                 </FormPanel>
               </InlineFormWrap>
             ) : null}
-            {condominio.assembleias?.length ? (
-              condominio.assembleias.map((assembleia) => (
+            {assembleiasFiltradas.length ? (
+              assembleiasFiltradas.map((assembleia) => (
                 <div
                   key={assembleia.id}
                   className="rounded-2xl border border-[var(--line)] bg-[var(--soft)] p-4"
@@ -1111,7 +1504,7 @@ export default function CondominioPage() {
                 </div>
               ))
             ) : (
-              <EmptyState text="Nenhuma assembleia cadastrada para este condominio." />
+              <EmptyState text={filtroAssembleiaNome || filtroAssembleiaDataInicio || filtroAssembleiaDataFim ? "Nenhuma assembleia encontrada com os filtros aplicados." : "Nenhuma assembleia cadastrada para este condominio."} />
             )}
           </ContentPanel>
         </section>
@@ -1125,11 +1518,77 @@ export default function CondominioPage() {
             actionOpen={false}
             onActionToggle={fazerCheckin}
           >
+            {/* Filtros */}
+            <div className="rounded-2xl border border-cyan-200 bg-cyan-50/50 p-4 space-y-3">
+              <p className="text-sm font-semibold text-[var(--ink)]">🔍 Filtros de busca</p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Buscar por usuário</label>
+                  <input
+                    type="text"
+                    value={filtroVisitaNome}
+                    onChange={(e) => setFiltroVisitaNome(e.target.value)}
+                    placeholder="Digite o nome..."
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Tipo</label>
+                  <select
+                    value={filtroVisitaTipo}
+                    onChange={(e) => setFiltroVisitaTipo(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-400"
+                  >
+                    <option value="todos">Todos</option>
+                    <option value="normal">Rotina</option>
+                    <option value="urgencia">Urgência</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Data início</label>
+                  <input
+                    type="date"
+                    value={filtroVisitaDataInicio}
+                    onChange={(e) => setFiltroVisitaDataInicio(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-[var(--muted)] mb-1">Data fim</label>
+                  <input
+                    type="date"
+                    value={filtroVisitaDataFim}
+                    onChange={(e) => setFiltroVisitaDataFim(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-400"
+                  />
+                </div>
+              </div>
+              {(filtroVisitaNome || filtroVisitaTipo !== 'todos' || filtroVisitaDataInicio || filtroVisitaDataFim) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFiltroVisitaNome('')
+                    setFiltroVisitaTipo('todos')
+                    setFiltroVisitaDataInicio('')
+                    setFiltroVisitaDataFim('')
+                  }}
+                  className="text-xs font-semibold text-cyan-600 hover:text-cyan-800"
+                >
+                  ✕ Limpar filtros
+                </button>
+              )}
+              <p className="text-xs text-[var(--muted)]">
+                Mostrando <strong>{visitasFiltradas.length}</strong> de <strong>{(condominio.visitas || []).length}</strong> visitas
+              </p>
+            </div>
+
             {!(condominio.visitas || []).length ? (
               <EmptyState text="Nenhuma visita registrada. Clique em 'Fazer check-in agora' para registrar sua visita." />
+            ) : visitasFiltradas.length === 0 ? (
+              <EmptyState text="Nenhuma visita encontrada com os filtros aplicados." />
             ) : (
               <div className="space-y-3">
-                {(condominio.visitas || []).map((v) => (
+                {visitasFiltradas.map((v) => (
                   <div key={v.id} className={`rounded-2xl border p-4 ${
                     v.tipo === 'urgencia'
                       ? 'border-red-200 bg-red-50'
