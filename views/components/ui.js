@@ -83,7 +83,7 @@ export function ContentPanel({ title, children, actionLabel, actionOpen = false,
 
 export function InlineFormWrap({ children }) {
   return (
-    <div className="rounded-[1.5rem] border border-[var(--line)] bg-[linear-gradient(180deg,rgba(34,211,238,0.06),rgba(255,255,255,0.85))] p-4">
+    <div className="rounded-[1.5rem] border border-[var(--line)] bg-white p-4">
       {children}
     </div>
   )

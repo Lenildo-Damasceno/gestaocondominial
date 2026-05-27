@@ -13,8 +13,7 @@ import { supabaseConfigError } from '@/models/supabase'
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', helper: 'Tela inicial', badge: '01' },
   { href: '/condominios', label: 'Condomínios', helper: 'Selecione um condomínio', badge: '02' },
-  { href: '/documentos', label: 'Documentos', helper: 'Atas e contratos', badge: '03' },
-  { href: '/configuracoes', label: 'Configurações', helper: 'Gerenciar usuários', badge: '04' },
+  { href: '/configuracoes', label: 'Configurações', helper: 'Gerenciar usuários', badge: '03' },
 ]
 
 export default function AdminShell({ title, subtitle, currentPath, children, sidebar, headerActions }) {
@@ -51,17 +50,17 @@ export default function AdminShell({ title, subtitle, currentPath, children, sid
 
   const sidebarContent = sidebar || (
     <>
-      <div className="rounded-[1.5rem] border border-white/10 bg-white/6 p-5">
+      <div className="rounded-[1.5rem] border border-white/10 bg-white/6 p-4">
         <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-[var(--accent)]">Você está em</p>
-        <h2 className="mt-2 text-lg font-semibold tracking-tight">
+        <h2 className="mt-1 text-lg font-semibold tracking-tight">
           {navItems.find((i) => i.href === currentPath)?.label || 'Painel'}
         </h2>
-        <p className="mt-2 text-xs text-white/60">
+        <p className="mt-1 text-xs text-white/60">
           {navItems.find((i) => i.href === currentPath)?.helper || 'Navegue pelo menu abaixo'}
         </p>
       </div>
 
-      <nav aria-label="Menu principal" className="mt-5 grid gap-2">
+      <nav aria-label="Menu principal" className="mt-4 grid gap-3">
         {navItems.map((item) => (
           <Link
             key={item.href}
@@ -120,7 +119,7 @@ export default function AdminShell({ title, subtitle, currentPath, children, sid
         )}
 
         <div className={`fixed inset-y-0 left-0 z-[9999] w-72 transform transition-transform duration-300 lg:hidden ${menuAberto ? 'translate-x-0' : '-translate-x-full'}`}>
-          <div className="flex h-full flex-col overflow-y-auto rounded-r-2xl border-r border-white/10 bg-slate-800 p-4 text-white shadow-[4px_0_32px_rgba(2,6,23,0.35)]">
+          <div className="flex h-full flex-col rounded-r-2xl border-r border-white/10 bg-slate-800 p-4 text-white shadow-[4px_0_32px_rgba(2,6,23,0.35)] overflow-hidden">
             <div className="flex items-center justify-between mb-5">
               <p className="text-sm font-semibold text-white/80">Menu</p>
               <button type="button" onClick={() => setMenuAberto(false)} className="rounded-full bg-white/10 p-2 text-white/70 hover:bg-white/20">
@@ -136,7 +135,7 @@ export default function AdminShell({ title, subtitle, currentPath, children, sid
 
         <div className="flex min-h-screen w-full flex-col lg:flex-row items-stretch">
           <aside className="hidden lg:block lg:w-[280px] lg:flex-none bg-slate-800 print:hidden">
-            <div className="sticky top-[57px] flex h-[calc(100vh-57px)] flex-col overflow-y-auto p-4 text-white sm:p-5">
+            <div className="flex h-screen flex-col p-3 text-white overflow-hidden sm:p-4">
               {sidebarContent}
               {userPanel}
             </div>
@@ -144,8 +143,8 @@ export default function AdminShell({ title, subtitle, currentPath, children, sid
 
           <section className="min-w-0 flex-1 bg-white">
             <div className="min-h-screen border-l border-slate-200 bg-white print:border-none">
-              <header className="relative overflow-hidden border-b border-slate-200 bg-white p-4 sm:p-6 print:hidden">
-                <div className="relative flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+              <header className="relative border-b border-slate-200 bg-white p-3 sm:p-4 print:hidden">
+                <div className="relative flex flex-col lg:flex-row lg:items-start lg:justify-between">
                   <div className="max-w-4xl">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--accent-strong)]">Painel administrativo</p>
                     <h1 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--panel-strong)] sm:text-3xl">{title}</h1>
@@ -154,7 +153,7 @@ export default function AdminShell({ title, subtitle, currentPath, children, sid
                   {headerActions ? <div className="flex flex-wrap gap-3 lg:justify-end">{headerActions}</div> : null}
                 </div>
               </header>
-              <div className="p-3 sm:p-4 lg:p-6">{children}</div>
+              <div className="px-3 sm:px-4 lg:px-6 pt-2">{children}</div>
             </div>
           </section>
         </div>

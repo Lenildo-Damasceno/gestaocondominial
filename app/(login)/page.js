@@ -95,13 +95,11 @@ export default function Login() {
 
           {/* Logo / Marca */}
           <div className="mb-8 flex flex-col items-center text-center">
-            <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#0f52ff] to-[#22d3ee] shadow-[0_8px_32px_rgba(15,82,255,0.4)]">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7 text-white" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M1 22V9l11-7 11 7v13H15v-7h-6v7H1z"/>
-              </svg>
+            <div className="mb-4 flex items-center gap-4">
+              <img src="/assets/logo_es.png" alt="ES Gestão Condominial" className="h-20 w-20 object-contain" />
+              <h1 className="text-3xl font-bold tracking-tight text-white">ES Gestão Condominial</h1>
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-white">ES Gestão Condominial</h1>
-            <p className="mt-1 text-sm text-white/40">
+            <p className="text-sm text-white/40">
               {modoReset ? 'Redefinição de senha' : 'Painel administrativo'}
             </p>
           </div>
@@ -242,3 +240,4 @@ export default function Login() {
     </div>
   )
 }
+

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import AdminShell from '@/views/components/admin-shell'
 import DetalheModal from '@/views/components/detalhe-modal'
+import { useSession } from '@/lib/useAuth'
 import {
   calcularDiasParaData,
   formatarData,
@@ -14,6 +15,7 @@ import {
 } from '@/controllers/condominio'
 
 export default function DashboardPage() {
+  const { user } = useSession()
   const [condominios, setCondominios] = useState([])
   const [modal, setModal] = useState(null)
 
@@ -119,6 +121,13 @@ export default function DashboardPage() {
       currentPath="/dashboard"
     >
       <div className="space-y-3">
+
+        {/* Boas-vindas */}
+        {user && (
+          <div className="text-sm font-medium text-[var(--muted)]">
+            Bem-vindo, <span className="text-[var(--ink)] font-semibold">{user.email?.split('@')[0] || user.email}</span>
+          </div>
+        )}
 
         {/* Alertas críticos */}
         {temAlertas && (

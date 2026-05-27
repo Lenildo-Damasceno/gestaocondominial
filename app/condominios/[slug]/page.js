@@ -23,7 +23,6 @@ import {
   adicionarAvisoAoCondominio,
   adicionarContaAoCondominio,
   adicionarManutencaoAoCondominio,
-  editarContaDoCondominio,
   editarManutencaoDoCondominio,
   excluirManutencaoDoCondominio,
   excluirContaDoCondominio,
@@ -32,7 +31,6 @@ import {
   registrarHistoricoManutencao,
   adicionarDocumentoAoCondominio,
   excluirDocumentoDoCondominio,
-  registrarVisita,
   excluirVisita,
   editarVisita,
   atualizarCondominio,
@@ -50,7 +48,6 @@ export default function CondominioPage() {
   const params = useParams()
   const slug = Array.isArray(params.slug) ? params.slug[0] : params.slug
   const [, forceRefresh] = useReducer((value) => value + 1, 0)
-  const fileInputDocRef = useRef(null)
   const [secaoAtiva, setSecaoAtiva] = useState('resumo')
   const [painelAberto, setPainelAberto] = useState('')
   const [manutencaoTipo, setManutencaoTipo] = useState('programadas')
@@ -81,6 +78,18 @@ export default function CondominioPage() {
     data: '',
     descricao: '',
   })
+  const [contratoForm, setContratoForm] = useState({
+    empresa: '',
+    servico: '',
+    inicio: '',
+    vencimento: '',
+    valor: '',
+    alertaDias: '30',
+    arquivo: '',
+    nomeArquivo: '',
+  })
+  const [contratoVisualizando, setContratoVisualizando] = useState(null)
+  const fileInputContratoRef = useRef(null)
   const [assembleiaForm, setAssembleiaForm] = useState({
     titulo: '',
     data: '',
@@ -95,6 +104,8 @@ export default function CondominioPage() {
     arquivo: '',
     nomeArquivo: '',
   })
+  const [documentoVisualizando, setDocumentoVisualizando] = useState(null)
+  const [dadosEditForm, setDadosEditForm] = useState({})
   const [contaEditando, setContaEditando] = useState(null)
   const [contaEditForm, setContaEditForm] = useState({})
   const [modalVisita, setModalVisita] = useState(false)
@@ -134,6 +145,44 @@ export default function CondominioPage() {
   const { user } = useSession()
   const nomeUsuario = user?.user_metadata?.full_name || user?.email || 'Usuário'
   const condominio = slug ? buscarCondominioPorSlug(slug) : null
+  
+  React.useEffect(() => {
+    if (condominio && painelAberto === 'dados' && Object.keys(dadosEditForm).length === 0) {
+      setDadosEditForm({
+        nome: condominio.nome,
+        sindico: condominio.sindico || '',
+        endereco: condominio.endereco || '',
+        cidade: condominio.cidade || '',
+        unidades: condominio.unidades || '',
+      })
+    }
+  }, [painelAberto, condominio?.slug])
+
+  function abrirEdicaoDados() {
+    if (!condominio) return
+    setDadosEditForm({
+      nome: condominio.nome,
+      sindico: condominio.sindico || '',
+      endereco: condominio.endereco || '',
+      cidade: condominio.cidade || '',
+      unidades: condominio.unidades || '',
+    })
+    setPainelAberto('dados')
+  }
+  
+  function salvarDados() {
+    if (!condominio) return
+    atualizarCondominio(condominio.slug, (c) => ({
+      ...c,
+      nome: dadosEditForm.nome || c.nome,
+      sindico: dadosEditForm.sindico,
+      endereco: dadosEditForm.endereco,
+      cidade: dadosEditForm.cidade,
+      unidades: dadosEditForm.unidades ? parseInt(dadosEditForm.unidades) : c.unidades,
+    }))
+    forceRefresh()
+    setPainelAberto('')
+  }
 
   const manutencoesPorFrequencia = (() => {
     const mapa = {}
@@ -296,6 +345,51 @@ export default function CondominioPage() {
     reader.readAsDataURL(file)
   }
 
+  function cadastrarContrato(event) {
+    event.preventDefault()
+    atualizarCondominio(condominio.slug, (c) => ({
+      ...c,
+      contratos: [
+        {
+          id: `contrato-${Date.now()}`,
+          ...contratoForm,
+        },
+        ...(c.contratos || []),
+      ],
+    }))
+    setContratoForm({
+      empresa: '',
+      servico: '',
+      inicio: '',
+      vencimento: '',
+      valor: '',
+      alertaDias: '30',
+      arquivo: '',
+      nomeArquivo: '',
+    })
+    recarregar()
+  }
+
+  function excluirContrato(id) {
+    if (!confirm('Excluir este contrato? Esta ação não pode ser desfeita.')) return
+    atualizarCondominio(condominio.slug, (c) => ({
+      ...c,
+      contratos: (c.contratos || []).filter((item) => item.id !== id),
+    }))
+    forceRefresh()
+  }
+
+  function handleFileContratoChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      setContratoForm(f => ({ ...f, arquivo: ev.target.result, nomeArquivo: file.name }))
+    }
+    reader.readAsDataURL(file)
+  }
+
   function cadastrarAviso(event) {
     event.preventDefault()
     adicionarAvisoAoCondominio(condominio.slug, avisoForm)
@@ -394,11 +488,12 @@ export default function CondominioPage() {
 
   const menuItens = [
     { id: 'resumo', label: 'Resumo', helper: 'Visão geral do condomínio' },
+    { id: 'contratos', label: 'Contratos', helper: 'Gestão de fornecedores' },
     { id: 'manutencoes', label: 'Manutenções', helper: 'Programadas e recorrentes' },
     { id: 'contas', label: 'Contas', helper: 'Despesas e títulos' },
     { id: 'avisos', label: 'Avisos', helper: 'Comunicados' },
     { id: 'assembleias', label: 'Assembleias', helper: 'Atas e encontros' },
-    { id: 'documentos', label: 'Documentos', helper: 'Atas e contratos' },
+    { id: 'documentos', label: 'Documentos', helper: 'Atas e regulamentos' },
   ]
 
   const contasNormalizadas = condominio.contas.map((conta) => normalizarConta(conta))
@@ -559,6 +654,25 @@ export default function CondominioPage() {
 
         <button
           type="button"
+          aria-current={secaoAtiva === 'contratos' ? 'page' : undefined}
+          onClick={() => abrirSecao('contratos')}
+          className={
+            secaoAtiva === 'contratos'
+              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
+              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
+          }
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Contratos</p>
+              <p className="mt-1 text-xs text-white/62 hidden sm:block">Gestão de fornecedores</p>
+            </div>
+            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">{(condominio.contratos || []).length.toString().padStart(2,'0')}</span>
+          </div>
+        </button>
+
+        <button
+          type="button"
           aria-current={secaoAtiva === 'manutencoes' ? 'page' : undefined}
           onClick={() => abrirSecao('manutencoes')}
           className={
@@ -630,6 +744,25 @@ export default function CondominioPage() {
               <p className="mt-1 text-xs text-white/62 hidden sm:block">Atas e contratos</p>
             </div>
             <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">{(condominio.documentos || []).length.toString().padStart(2,'0')}</span>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          aria-current={secaoAtiva === 'dados' ? 'page' : undefined}
+          onClick={() => abrirSecao('dados')}
+          className={
+            secaoAtiva === 'dados'
+              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
+              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
+          }
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Dados</p>
+              <p className="mt-1 text-xs text-white/62 hidden sm:block">Editar informações</p>
+            </div>
+            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">07</span>
           </div>
         </button>
 
@@ -723,13 +856,6 @@ export default function CondominioPage() {
 
         {secaoAtiva === 'resumo' ? (
           <section id="resumo" className="space-y-3">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-              <SummaryCard label="Unidades" value={condominio.unidades} />
-              <SummaryCard label="Contas Pendentes" value={contasNormalizadas.filter(c => c.status !== 'Paga').length} />
-              <SummaryCard label="Próx. Manutenção" value={proximaManutencao ? formatarData(proximaManutencao.proximaData) : '—'} />
-              <SummaryCard label="Próx. Assembleia" value={proximaAssembleia ? formatarData(proximaAssembleia.data) : '—'} />
-            </div>
-
             {/* Contas */}
             <ContentPanel title="Contas" actionLabel="Nova conta" actionOpen={painelAberto === 'conta'} onActionToggle={() => setPainelAberto((a) => (a === 'conta' ? '' : 'conta'))}>
               {painelAberto === 'conta' && (
@@ -1036,6 +1162,145 @@ export default function CondominioPage() {
                 </div>
                 ))
               )}
+          </ContentPanel>
+        </section>
+        ) : null}
+
+        {secaoAtiva === 'contratos' ? (
+        <section id="contratos">
+          <ContentPanel
+            title="Contratos e Fornecedores"
+            actionLabel="Novo contrato"
+            actionOpen={painelAberto === 'contrato'}
+            onActionToggle={() => setPainelAberto((atual) => (atual === 'contrato' ? '' : 'contrato'))}
+          >
+            {painelAberto === 'contrato' ? (
+              <InlineFormWrap>
+                <FormPanel title="Cadastrar novo contrato" onSubmit={cadastrarContrato} compact>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Nome da Empresa">
+                      <input value={contratoForm.empresa} onChange={(e) => atualizarForm(setContratoForm, 'empresa', e.target.value)} className={inputClass} placeholder="Ex: Elevadores Silva" required />
+                    </Field>
+                    <Field label="Serviço prestado">
+                      <input value={contratoForm.servico} onChange={(e) => atualizarForm(setContratoForm, 'servico', e.target.value)} className={inputClass} placeholder="Ex: Manutenção preventiva" required />
+                    </Field>
+                  </div>
+                  
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Data de início">
+                      <input type="date" value={contratoForm.inicio} onChange={(e) => atualizarForm(setContratoForm, 'inicio', e.target.value)} className={inputClass} required />
+                    </Field>
+                    <Field label="Data de vencimento">
+                      <input type="date" value={contratoForm.vencimento} onChange={(e) => atualizarForm(setContratoForm, 'vencimento', e.target.value)} className={inputClass} required />
+                    </Field>
+                  </div>
+                  
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Valor mensal (opcional)">
+                      <input type="number" step="0.01" value={contratoForm.valor} onChange={(e) => atualizarForm(setContratoForm, 'valor', e.target.value)} className={inputClass} />
+                    </Field>
+                    <Field label="Avisar vencimento com">
+                      <select value={contratoForm.alertaDias} onChange={(e) => atualizarForm(setContratoForm, 'alertaDias', e.target.value)} className={inputClass}>
+                        <option value="15">15 dias de antecedência</option>
+                        <option value="30">30 dias de antecedência</option>
+                        <option value="60">60 dias de antecedência</option>
+                        <option value="90">90 dias de antecedência</option>
+                      </select>
+                    </Field>
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-[var(--ink)]">Anexar Contrato (PDF ou Imagem)</label>
+                    <input 
+                      type="file" 
+                      accept="image/*,.pdf" 
+                      className="hidden" 
+                      ref={fileInputContratoRef}
+                      onChange={handleFileContratoChange}
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => fileInputContratoRef.current?.click()}
+                      className="w-full rounded-xl border-2 border-dashed border-[var(--line)] bg-white px-4 py-4 text-center text-sm font-semibold text-[var(--muted)] hover:bg-slate-50 transition"
+                    >
+                      {contratoForm.nomeArquivo ? `✅ ${contratoForm.nomeArquivo}` : '📎 Clique para selecionar o arquivo do contrato'}
+                    </button>
+                  </div>
+
+                  <SubmitButton label="Salvar contrato" />
+                </FormPanel>
+              </InlineFormWrap>
+            ) : null}
+
+            {!(condominio.contratos || []).length ? (
+              <EmptyState text="Nenhum contrato cadastrado. Cadastre seguros, manutenção de elevadores, portaria, etc." />
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {(condominio.contratos || []).map((contrato) => {
+                  const dataVenc = new Date(contrato.vencimento)
+                  const hoje = new Date()
+                  const diffTime = dataVenc.getTime() - hoje.getTime()
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+                  
+                  const isVencido = diffDays < 0
+                  const isAlerta = diffDays <= parseInt(contrato.alertaDias) && diffDays >= 0
+
+                  return (
+                    <article
+                      key={contrato.id}
+                      className={`rounded-2xl border p-4 ${
+                        isVencido ? 'border-red-200 bg-red-50' : 
+                        isAlerta ? 'border-amber-200 bg-amber-50' : 
+                        'border-[var(--line)] bg-[var(--soft)]'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-semibold text-[var(--ink)] truncate">{contrato.empresa}</p>
+                            {isVencido ? (
+                              <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">VENCIDO</span>
+                            ) : isAlerta ? (
+                              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">VENCE EM {diffDays} DIAS</span>
+                            ) : null}
+                          </div>
+                          <p className="mt-1 text-xs font-medium text-[var(--muted)]">{contrato.servico}</p>
+                          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-[var(--muted)]">
+                            <div>
+                              <span className="block text-[10px] uppercase tracking-wider opacity-70">Início</span>
+                              {formatarData(contrato.inicio)}
+                            </div>
+                            <div>
+                              <span className="block text-[10px] uppercase tracking-wider opacity-70">Vencimento</span>
+                              <span className={isVencido || isAlerta ? 'font-bold text-inherit' : ''}>{formatarData(contrato.vencimento)}</span>
+                            </div>
+                            {contrato.valor && (
+                              <div>
+                                <span className="block text-[10px] uppercase tracking-wider opacity-70">Valor</span>
+                                {formatarMoeda(contrato.valor)}
+                              </div>
+                            )}
+                          </div>
+                          
+                          {contrato.arquivo && (
+                            <button 
+                              type="button"
+                              onClick={() => setContratoVisualizando(contrato)}
+                              className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-[var(--accent-strong)] hover:underline"
+                            >
+                              📄 Ver documento anexado
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex shrink-0">
+                          <button type="button" onClick={() => excluirContrato(contrato.id)} className="text-xs font-semibold text-red-400 hover:text-red-600 p-1">Excluir</button>
+                        </div>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
           </ContentPanel>
         </section>
         ) : null}
@@ -1518,6 +1783,124 @@ export default function CondominioPage() {
         </section>
         ) : null}
 
+        {secaoAtiva === 'documentos' ? (
+        <section id="documentos">
+          <ContentPanel
+            title="Documentos do condominio"
+            actionLabel="Enviar documento"
+            actionOpen={painelAberto === 'documento'}
+            onActionToggle={() => setPainelAberto((atual) => (atual === 'documento' ? '' : 'documento'))}
+          >
+            {painelAberto === 'documento' ? (
+              <InlineFormWrap>
+                <FormPanel title="Enviar novo documento" compact>
+                  <div>
+                    <input 
+                      type="file" 
+                      accept="image/*,.pdf" 
+                      className="hidden" 
+                      ref={fileInputDocRef}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (!file) return
+                        const reader = new FileReader()
+                        reader.onload = (ev) => {
+                          setDocumentoForm(prev => ({ 
+                            ...prev, 
+                            arquivo: ev.target.result,
+                            nomeArquivo: file.name
+                          }))
+                        }
+                        reader.readAsDataURL(file)
+                      }}
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => fileInputDocRef.current?.click()}
+                      className="w-full rounded-xl border-2 border-dashed border-[var(--accent)] bg-blue-50 px-4 py-6 text-center text-sm font-semibold text-[var(--accent-strong)] hover:bg-blue-100 transition"
+                    >
+                      📎 Clique para selecionar um arquivo
+                    </button>
+                    {documentoForm.nomeArquivo && (
+                      <p className="mt-2 text-xs text-[var(--muted)]">Arquivo selecionado: {documentoForm.nomeArquivo}</p>
+                    )}
+                  </div>
+                  <Field label="Titulo do documento">
+                    <input value={documentoForm.titulo} onChange={(e) => setDocumentoForm(f => ({ ...f, titulo: e.target.value }))} className={inputClass} placeholder="Ex: Ata de Assembleia" required />
+                  </Field>
+                  <Field label="Tipo">
+                    <select value={documentoForm.tipo} onChange={(e) => setDocumentoForm(f => ({ ...f, tipo: e.target.value }))} className={inputClass}>
+                      <option value="Ata">Ata</option>
+                      <option value="Contrato">Contrato</option>
+                      <option value="Regulamento">Regulamento</option>
+                      <option value="Outros">Outros</option>
+                    </select>
+                  </Field>
+                  <Field label="Data">
+                    <input type="date" value={documentoForm.data} onChange={(e) => setDocumentoForm(f => ({ ...f, data: e.target.value }))} className={inputClass} required />
+                  </Field>
+                  <div className="flex gap-3">
+                    <button 
+                      type="button" 
+                      onClick={() => {
+                        setDocumentoForm({ titulo: '', tipo: 'Ata', data: '', arquivo: '', nomeArquivo: '' })
+                        setPainelAberto('')
+                      }}
+                      className="flex-1 rounded-full border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                    >
+                      Cancelar
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={cadastrarDocumento}
+                      disabled={!documentoForm.titulo || !documentoForm.data || !documentoForm.arquivo}
+                      className="flex-1 rounded-full bg-[var(--panel-strong)] px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
+                    >
+                      Salvar documento
+                    </button>
+                  </div>
+                </FormPanel>
+              </InlineFormWrap>
+            ) : null}
+
+            {(condominio.documentos || []).length === 0 ? (
+              <EmptyState text="Nenhum documento cadastrado. Clique em 'Enviar documento' para começar." />
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {(condominio.documentos || []).map((doc) => (
+                  <article
+                    key={doc.id}
+                    className="rounded-2xl border border-slate-200 bg-[var(--soft)] p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-[var(--ink)] truncate">{doc.titulo}</p>
+                        <p className="mt-1 text-xs text-[var(--muted)]">{formatarData(doc.data)}</p>
+                        {doc.arquivo && (
+                          <button 
+                            type="button"
+                            onClick={() => setDocumentoVisualizando(doc)}
+                            className="mt-2 inline-block text-xs font-bold text-[var(--accent-strong)] hover:underline"
+                          >
+                            📄 Visualizar
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <span className="rounded-full bg-cyan-100 px-2.5 py-1 text-xs font-semibold text-cyan-800 shrink-0">
+                          {doc.tipo}
+                        </span>
+                        <button type="button" onClick={() => excluirDocumento(doc.id)} className="text-xs font-semibold text-red-400 hover:text-red-600">Excluir</button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </ContentPanel>
+        </section>
+        ) : null}
+
         {secaoAtiva === 'visitas' ? (
         <section id="visitas">
           <ContentPanel
@@ -1665,10 +2048,160 @@ export default function CondominioPage() {
         </section>
         ) : null}
 
+        {secaoAtiva === 'dados' ? (
+        <section id="dados">
+          <ContentPanel
+            title="Dados do condomínio"
+            actionLabel="Editar dados"
+            actionOpen={painelAberto === 'dados'}
+            onActionToggle={painelAberto === 'dados' ? () => setPainelAberto('') : abrirEdicaoDados}
+          >
+            {painelAberto === 'dados' ? (
+              <InlineFormWrap>
+                <FormPanel title="Editar informações do condomínio" compact>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Nome do condomínio">
+                      <input 
+                        value={dadosEditForm.nome || ''} 
+                        onChange={(e) => setDadosEditForm(f => ({ ...f, nome: e.target.value }))} 
+                        className={inputClass} 
+                        placeholder="Ex: Condomínio Vista Parque"
+                      />
+                    </Field>
+                    <Field label="Síndico">
+                      <input 
+                        value={dadosEditForm.sindico || ''} 
+                        onChange={(e) => setDadosEditForm(f => ({ ...f, sindico: e.target.value }))} 
+                        className={inputClass} 
+                        placeholder="Nome do síndico"
+                      />
+                    </Field>
+                  </div>
+                  
+                  <Field label="Endereço">
+                    <input 
+                      value={dadosEditForm.endereco || ''} 
+                      onChange={(e) => setDadosEditForm(f => ({ ...f, endereco: e.target.value }))} 
+                      className={inputClass} 
+                      placeholder="Ex: Rua das Flores, 123"
+                    />
+                  </Field>
+                  
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Cidade">
+                      <input 
+                        value={dadosEditForm.cidade || ''} 
+                        onChange={(e) => setDadosEditForm(f => ({ ...f, cidade: e.target.value }))} 
+                        className={inputClass} 
+                        placeholder="Ex: São Paulo, SP"
+                      />
+                    </Field>
+                    <Field label="Quantidade de unidades">
+                      <input 
+                        type="number" 
+                        value={dadosEditForm.unidades || ''} 
+                        onChange={(e) => setDadosEditForm(f => ({ ...f, unidades: e.target.value }))} 
+                        className={inputClass} 
+                        placeholder="Ex: 120"
+                      />
+                    </Field>
+                  </div>
+                  
+                  <div className="flex gap-3 pt-4 border-t border-slate-200">
+                    <button 
+                      type="button" 
+                      onClick={() => setPainelAberto('')}
+                      className="flex-1 rounded-full border border-slate-200 py-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                    >
+                      Cancelar
+                    </button>
+                    <button 
+                      type="button" 
+                      onClick={salvarDados}
+                      className="flex-1 rounded-full bg-[var(--panel-strong)] py-3 text-sm font-semibold text-white transition hover:brightness-110"
+                    >
+                      💾 Salvar dados
+                    </button>
+                  </div>
+                </FormPanel>
+              </InlineFormWrap>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <article className="rounded-2xl border border-slate-200 bg-[var(--soft)] p-5">
+                  <p className="text-xs text-[var(--muted)] font-medium uppercase tracking-[0.1em]">Nome</p>
+                  <p className="mt-3 text-lg font-bold text-[var(--ink)]">{condominio.nome}</p>
+                </article>
+                <article className="rounded-2xl border border-slate-200 bg-[var(--soft)] p-5">
+                  <p className="text-xs text-[var(--muted)] font-medium uppercase tracking-[0.1em]">Síndico</p>
+                  <p className="mt-3 text-lg font-bold text-[var(--ink)]">{condominio.sindico || <span className="text-slate-400">Não informado</span>}</p>
+                </article>
+                <article className="rounded-2xl border border-slate-200 bg-[var(--soft)] p-5 sm:col-span-2">
+                  <p className="text-xs text-[var(--muted)] font-medium uppercase tracking-[0.1em]">Endereço</p>
+                  <p className="mt-3 text-base text-[var(--ink)]">{condominio.endereco || <span className="text-slate-400">Não informado</span>}</p>
+                </article>
+                <article className="rounded-2xl border border-slate-200 bg-[var(--soft)] p-5">
+                  <p className="text-xs text-[var(--muted)] font-medium uppercase tracking-[0.1em]">Cidade</p>
+                  <p className="mt-3 text-base font-semibold text-[var(--ink)]">{condominio.cidade || <span className="text-slate-400">Não informado</span>}</p>
+                </article>
+                <article className="rounded-2xl border border-slate-200 bg-[var(--soft)] p-5">
+                  <p className="text-xs text-[var(--muted)] font-medium uppercase tracking-[0.1em]">Unidades</p>
+                  <p className="mt-3 text-lg font-bold text-[var(--ink)]">{condominio.unidades || <span className="text-slate-400">—</span>}</p>
+                </article>
+              </div>
+            )}
+          </ContentPanel>
+        </section>
+        ) : null}
+
       </div>
     </AdminShell>
 
     {modal && <DetalheModal item={modal.item} tipo={modal.tipo} slug={condominio.slug} onClose={fecharModal} onSaved={fecharModal} />}
+
+    {documentoVisualizando && (
+      <div
+        className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 px-4"
+        onClick={(e) => e.target === e.currentTarget && setDocumentoVisualizando(null)}
+      >
+        <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+          {/* Header */}
+          <div className="flex items-center justify-between bg-[var(--panel-strong)] px-4 py-3">
+            <div>
+              <p className="text-sm font-bold text-white">{documentoVisualizando.titulo}</p>
+              <p className="text-xs text-white/70">{formatarData(documentoVisualizando.data)}</p>
+            </div>
+            <button 
+              type="button" 
+              onClick={() => setDocumentoVisualizando(null)} 
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25 transition"
+            >
+              ×
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto bg-gray-50 p-4">
+            {documentoVisualizando.arquivo ? (
+              documentoVisualizando.arquivo.startsWith('data:image') ? (
+                <img 
+                  src={documentoVisualizando.arquivo} 
+                  alt={documentoVisualizando.titulo}
+                  className="max-w-full h-auto rounded-lg"
+                />
+              ) : (
+                <iframe
+                  src={documentoVisualizando.arquivo}
+                  className="w-full h-[500px] rounded-lg"
+                  title={documentoVisualizando.titulo}
+                />
+              )
+            ) : (
+              <p className="text-center text-[var(--muted)]">Arquivo não disponível</p>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
 
     {modalVisita && (
       <div
@@ -1755,15 +2288,6 @@ export default function CondominioPage() {
 
 const inputClass =
   'w-full rounded-2xl border border-[var(--line)] bg-[var(--soft)] px-4 py-3 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)]'
-
-function SummaryCard({ label, value }) {
-  return (
-    <article className="rounded-[1.5rem] border border-black/5 bg-white/85 p-5 shadow-[0_16px_40px_rgba(71,47,24,0.06)]">
-      <p className="text-sm text-[var(--muted)]">{label}</p>
-      <p className="mt-3 text-2xl font-semibold text-[var(--ink)]">{value}</p>
-    </article>
-  )
-}
 
 function InsightCard({ title, description, meta }) {
   return (

@@ -3,42 +3,22 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import AdminShell from '@/views/components/admin-shell'
-import { excluirCondominio, listarCondominios } from '@/controllers/condominio'
+import { listarCondominios } from '@/controllers/condominio'
 
 const coresCondominio = [
-  'bg-[#12365d] hover:bg-[#0f2f52]',
-  'bg-[#0f766e] hover:bg-[#115e59]',
-  'bg-[#7c2d12] hover:bg-[#6b2810]',
-  'bg-[#4338ca] hover:bg-[#3730a3]',
-  'bg-[#9f1239] hover:bg-[#881337]',
+  'from-[#0f52ff] to-[#22d3ee]',
+  'from-[#0f766e] to-[#14b8a6]',
+  'from-[#7c2d12] to-[#ea580c]',
+  'from-[#4338ca] to-[#7c3aed]',
+  'from-[#9f1239] to-[#e11d48]',
 ]
 
 export default function CondominiosPage() {
-  const [excluindo, setExcluindo] = useState('')
   const [condominios, setCondominios] = useState([])
 
   useEffect(() => {
     setCondominios(listarCondominios())
   }, [])
-
-  function recarregar() {
-    setCondominios(listarCondominios())
-  }
-
-  function removerCondominio(slug, nome) {
-    const confirmado = window.confirm(
-      `Deseja realmente excluir o condominio "${nome}"? Esta acao remove o cadastro salvo neste navegador.`
-    )
-
-    if (!confirmado) {
-      return
-    }
-
-    setExcluindo(slug)
-    excluirCondominio(slug)
-    recarregar()
-    setExcluindo('')
-  }
 
   return (
     <AdminShell
@@ -69,25 +49,28 @@ export default function CondominiosPage() {
               </p>
             </div>
           ) : (
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {condominios.map((condominio, index) => (
                 <Link
                   key={condominio.id}
                   href={`/condominios/${condominio.slug}`}
-                  className={`flex min-h-10 items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm font-semibold text-white shadow-sm transition active:scale-[0.99] ${coresCondominio[index % coresCondominio.length]}`}
+                  className={`group relative overflow-hidden rounded-xl bg-gradient-to-br ${coresCondominio[index % coresCondominio.length]} p-4 text-white shadow-md transition hover:shadow-lg hover:scale-[1.02] active:scale-[0.98] sm:p-5`}
                 >
-                  <span className="min-w-0 truncate">{condominio.nome}</span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      removerCondominio(condominio.slug, condominio.nome)
-                    }}
-                    disabled={excluindo === condominio.slug}
-                    className="shrink-0 rounded-lg bg-white/12 px-2 py-1 text-[11px] font-semibold text-white/75 transition hover:bg-white/18 hover:text-white disabled:opacity-50"
-                  >
-                    {excluindo === condominio.slug ? '...' : 'Excluir'}
-                  </button>
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition" />
+                  <div className="relative z-10 flex items-center gap-3">
+                    {condominio.foto ? (
+                      <img 
+                        src={condominio.foto} 
+                        alt={condominio.nome} 
+                        className="h-10 w-10 shrink-0 rounded-lg object-cover ring-1 ring-white/20"
+                      />
+                    ) : (
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/15 text-lg ring-1 ring-white/20">
+                        🏢
+                      </div>
+                    )}
+                    <p className="font-semibold text-white line-clamp-2">{condominio.nome}</p>
+                  </div>
                 </Link>
               ))}
             </div>

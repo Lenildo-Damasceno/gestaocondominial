@@ -3,20 +3,27 @@
 import { useEffect, useState } from 'react'
 import AdminShell from '@/views/components/admin-shell'
 import { supabase } from '@/models/supabase'
+import { useSession } from '@/lib/useAuth'
+import { listarCondominios, excluirCondominio } from '@/lib/condominios'
 
 export default function ConfiguracoesPage() {
+  const { user } = useSession()
   const [usuarios, setUsuarios] = useState([])
+  const [condominios, setCondominios] = useState([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState('')
   const [mostrarForm, setMostrarForm] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [excluindo, setExcluindo] = useState(null)
-
+  
   const [form, setForm] = useState({ email: '', senha: '', papel: 'Operador' })
+
+  const isAdministrador = user?.user_metadata?.papel === 'Administrador'
 
   useEffect(() => {
     carregarUsuarios()
+    setCondominios(listarCondominios() || [])
   }, [])
 
   async function carregarUsuarios() {
@@ -114,6 +121,20 @@ export default function ConfiguracoesPage() {
     setExcluindo(null)
   }
 
+  function handleExcluirCondominio(slug) {
+    if (!isAdministrador) {
+      alert('Apenas administradores podem excluir condomínios.')
+      return
+    }
+    
+    if (confirm('Tem certeza absoluta que deseja EXCLUIR este condomínio? Esta ação não pode ser desfeita.')) {
+      excluirCondominio(slug)
+      setCondominios(listarCondominios() || [])
+      setSucesso('Condomínio excluído com sucesso.')
+      setTimeout(() => setSucesso(''), 3000)
+    }
+  }
+
   return (
     <AdminShell
       title="Configurações"
@@ -121,114 +142,165 @@ export default function ConfiguracoesPage() {
       currentPath="/configuracoes"
     >
       <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="rounded-[2rem] border border-slate-200/70 bg-white/90 p-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--accent-strong)]">
-                Controle de acesso
-              </p>
-              <h2 className="mt-3 text-3xl font-semibold text-[var(--panel-strong)]">
-                Usuários do sistema
-              </h2>
-              <p className="mt-3 text-sm leading-7 text-[var(--muted)]">
-                Adicione ou remova usuários e gerencie permissões da equipe.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => { setMostrarForm(!mostrarForm); setErro(''); setSucesso('') }}
-              className="inline-flex rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--ink)] transition hover:brightness-95"
-            >
-              {mostrarForm ? 'Cancelar' : 'Adicionar usuário'}
-            </button>
-          </div>
-
-          {mostrarForm && (
-            <form onSubmit={cadastrarUsuario} className="mt-6 rounded-[1.5rem] border border-slate-200/80 bg-[var(--soft)] p-5 space-y-4">
-              <p className="text-sm font-semibold text-[var(--ink)]">Novo usuário</p>
-
+        <div className="flex flex-col gap-6">
+          <div className="rounded-[2rem] border border-slate-200/70 bg-white/90 p-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <label className="mb-1 block text-xs font-medium text-[var(--muted)]">E-mail</label>
-                <input
-                  type="email"
-                  required
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  placeholder="usuario@email.com"
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
-                />
+                <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--accent-strong)]">
+                  Controle de acesso
+                </p>
+                <h2 className="mt-3 text-3xl font-semibold text-[var(--panel-strong)]">
+                  Usuários do sistema
+                </h2>
+                <p className="mt-3 text-sm leading-7 text-[var(--muted)]">
+                  Adicione ou remova usuários e gerencie permissões da equipe.
+                </p>
               </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-[var(--muted)]">Senha</label>
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={form.senha}
-                  onChange={(e) => setForm({ ...form, senha: e.target.value })}
-                  placeholder="Mínimo 6 caracteres"
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-xs font-medium text-[var(--muted)]">Papel</label>
-                <select
-                  value={form.papel}
-                  onChange={(e) => setForm({ ...form, papel: e.target.value })}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
-                >
-                  <option value="Administrador">Administrador</option>
-                  <option value="Zeladoria/Portaria">Equipe Operacional</option>
-                </select>
-              </div>
-
               <button
-                type="submit"
-                disabled={salvando}
-                className="w-full rounded-full bg-[var(--ink)] py-3 text-sm font-semibold text-white transition hover:bg-black disabled:opacity-50"
+                type="button"
+                onClick={() => { setMostrarForm(!mostrarForm); setErro(''); setSucesso('') }}
+                className="inline-flex rounded-full bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-[var(--ink)] transition hover:brightness-95"
               >
-                {salvando ? 'Cadastrando...' : 'Cadastrar usuário'}
+                {mostrarForm ? 'Cancelar' : 'Adicionar usuário'}
               </button>
-            </form>
-          )}
+            </div>
 
-          {erro && (
-            <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{erro}</p>
-          )}
-          {sucesso && (
-            <p className="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{sucesso}</p>
-          )}
+            {mostrarForm && (
+              <form onSubmit={cadastrarUsuario} className="mt-6 rounded-[1.5rem] border border-slate-200/80 bg-[var(--soft)] p-5 space-y-4">
+                <p className="text-sm font-semibold text-[var(--ink)]">Novo usuário</p>
 
-          <div className="mt-8 space-y-4">
-            {carregando ? (
-              <p className="text-sm text-[var(--muted)]">Carregando usuários...</p>
-            ) : usuarios.length === 0 ? (
-              <p className="text-sm text-[var(--muted)]">Nenhum usuário encontrado.</p>
-            ) : (
-              usuarios.map((usuario) => (
-                <div
-                  key={usuario.id}
-                  className="rounded-[1.5rem] border border-slate-200/80 bg-[var(--soft)] p-5"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-lg font-semibold text-[var(--ink)]">{usuario.email}</p>
-                      <p className="mt-1 text-sm text-[var(--muted)]">{usuario.papel}</p>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={excluindo === usuario.id}
-                      onClick={() => excluirUsuario(usuario.id)}
-                      className="rounded-full border border-slate-300/80 bg-white px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
-                    >
-                      {excluindo === usuario.id ? 'Excluindo...' : 'Excluir'}
-                    </button>
-                  </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-[var(--muted)]">E-mail</label>
+                  <input
+                    type="email"
+                    required
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    placeholder="usuario@email.com"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                  />
                 </div>
-              ))
+
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-[var(--muted)]">Senha</label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    value={form.senha}
+                    onChange={(e) => setForm({ ...form, senha: e.target.value })}
+                    placeholder="Mínimo 6 caracteres"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-[var(--muted)]">Papel</label>
+                  <select
+                    value={form.papel}
+                    onChange={(e) => setForm({ ...form, papel: e.target.value })}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                  >
+                    <option value="Administrador">Administrador</option>
+                    <option value="Zeladoria/Portaria">Equipe Operacional</option>
+                  </select>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={salvando}
+                  className="w-full rounded-full bg-[var(--ink)] py-3 text-sm font-semibold text-white transition hover:bg-black disabled:opacity-50"
+                >
+                  {salvando ? 'Cadastrando...' : 'Cadastrar usuário'}
+                </button>
+              </form>
             )}
+
+            {erro && (
+              <p className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{erro}</p>
+            )}
+            {sucesso && (
+              <p className="mt-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{sucesso}</p>
+            )}
+
+            <div className="mt-8 space-y-4">
+              {carregando ? (
+                <p className="text-sm text-[var(--muted)]">Carregando usuários...</p>
+              ) : usuarios.length === 0 ? (
+                <p className="text-sm text-[var(--muted)]">Nenhum usuário encontrado.</p>
+              ) : (
+                usuarios.map((usuario) => (
+                  <div
+                    key={usuario.id}
+                    className="rounded-[1.5rem] border border-slate-200/80 bg-[var(--soft)] p-5"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-lg font-semibold text-[var(--ink)]">{usuario.email}</p>
+                        <p className="mt-1 text-sm text-[var(--muted)]">{usuario.papel}</p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={excluindo === usuario.id}
+                        onClick={() => excluirUsuario(usuario.id)}
+                        className="rounded-full border border-slate-300/80 bg-white px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                      >
+                        {excluindo === usuario.id ? 'Excluindo...' : 'Excluir'}
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+          
+          <div className="rounded-[2rem] border border-slate-200/70 bg-white/90 p-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
+            <div className="flex flex-col gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--accent-strong)]">
+                  Zona de perigo
+                </p>
+                <h2 className="mt-3 text-3xl font-semibold text-[var(--panel-strong)]">
+                  Condomínios
+                </h2>
+                <p className="mt-3 text-sm leading-7 text-[var(--muted)]">
+                  Gerencie a lista de condomínios cadastrados no sistema. A exclusão apagará todos os dados vinculados.
+                </p>
+              </div>
+
+              <div className="mt-4 space-y-4">
+                {condominios.length === 0 ? (
+                  <p className="text-sm text-[var(--muted)]">Nenhum condomínio encontrado.</p>
+                ) : (
+                  condominios.map((condominio) => (
+                    <div
+                      key={condominio.slug}
+                      className="rounded-[1.5rem] border border-slate-200/80 bg-[var(--soft)] p-5"
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-lg font-semibold text-[var(--ink)]">{condominio.nome}</p>
+                          <p className="mt-1 text-sm text-[var(--muted)]">{condominio.cidade || 'Sem cidade'}</p>
+                        </div>
+                        {isAdministrador ? (
+                          <button
+                            type="button"
+                            onClick={() => handleExcluirCondominio(condominio.slug)}
+                            className="rounded-full border border-slate-300/80 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100"
+                          >
+                            Excluir
+                          </button>
+                        ) : (
+                          <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-400 cursor-not-allowed" title="Apenas administradores podem excluir">
+                            Bloqueado
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
