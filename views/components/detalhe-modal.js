@@ -150,19 +150,19 @@ export default function DetalheModal({ item, tipo, slug, onClose, onSaved }) {
             {!editando && (
               <button
                 onClick={() => setEditando(true)}
-                className="flex-1 rounded-full bg-[#10203a] py-2.5 text-sm font-semibold text-white active:scale-95"
+                className="flex-1 rounded-full bg-[#10203a] py-2.5 text-sm font-semibold text-white transition hover:scale-105 active:scale-95"
               >
                 Editar
               </button>
             )}
             {editando && (
               <>
-                <button onClick={salvar} className="flex-1 rounded-full bg-emerald-600 py-2.5 text-sm font-semibold text-white active:scale-95">Salvar</button>
-                <button onClick={() => setEditando(false)} className="flex-1 rounded-full border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 active:scale-95">Cancelar</button>
+                <button onClick={salvar} className="flex-1 rounded-full bg-emerald-600 py-2.5 text-sm font-semibold text-white transition hover:scale-105 active:scale-95">Salvar</button>
+                <button onClick={() => setEditando(false)} className="flex-1 rounded-full border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 transition hover:scale-105 active:scale-95">Cancelar</button>
               </>
             )}
             {!editando && (
-              <button onClick={onClose} className="flex-1 rounded-full border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 active:scale-95">Fechar</button>
+              <button onClick={onClose} className="flex-1 rounded-full border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 transition hover:scale-105 active:scale-95">Fechar</button>
             )}
           </div>
         </div>

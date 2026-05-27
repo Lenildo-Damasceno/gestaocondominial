@@ -13,7 +13,7 @@
 'use client'
 
 import Link from 'next/link'
-import React, { useReducer, useState } from 'react'
+import React, { useReducer, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { useSession } from '@/lib/useAuth'
 import AdminShell from '@/views/components/admin-shell'
@@ -30,6 +30,8 @@ import {
   excluirAvisoDoCondominio,
   excluirAssembleiaDoCondominio,
   registrarHistoricoManutencao,
+  adicionarDocumentoAoCondominio,
+  excluirDocumentoDoCondominio,
   registrarVisita,
   excluirVisita,
   editarVisita,
@@ -48,6 +50,7 @@ export default function CondominioPage() {
   const params = useParams()
   const slug = Array.isArray(params.slug) ? params.slug[0] : params.slug
   const [, forceRefresh] = useReducer((value) => value + 1, 0)
+  const fileInputDocRef = useRef(null)
   const [secaoAtiva, setSecaoAtiva] = useState('resumo')
   const [painelAberto, setPainelAberto] = useState('')
   const [manutencaoTipo, setManutencaoTipo] = useState('programadas')
@@ -84,6 +87,13 @@ export default function CondominioPage() {
     horario: '',
     local: '',
     pauta: '',
+  })
+  const [documentoForm, setDocumentoForm] = useState({
+    titulo: '',
+    tipo: 'Ata',
+    data: '',
+    arquivo: '',
+    nomeArquivo: '',
   })
   const [contaEditando, setContaEditando] = useState(null)
   const [contaEditForm, setContaEditForm] = useState({})
@@ -270,6 +280,22 @@ export default function CondominioPage() {
     forceRefresh()
   }
 
+  function handleEnviarDocClick() {
+    fileInputDocRef.current?.click()
+  }
+
+  function handleFileDocChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      setDocumentoForm(f => ({ ...f, arquivo: ev.target.result, nomeArquivo: file.name, titulo: file.name }))
+      setPainelAberto('documento')
+    }
+    reader.readAsDataURL(file)
+  }
+
   function cadastrarAviso(event) {
     event.preventDefault()
     adicionarAvisoAoCondominio(condominio.slug, avisoForm)
@@ -279,6 +305,19 @@ export default function CondominioPage() {
       descricao: '',
     })
     recarregar()
+  }
+
+  function cadastrarDocumento(event) {
+    event.preventDefault()
+    adicionarDocumentoAoCondominio(condominio.slug, documentoForm)
+    setDocumentoForm({
+      titulo: '',
+      tipo: 'Ata',
+      data: '',
+      arquivo: '',
+      nomeArquivo: '',
+    })
+    recorregar()
   }
 
   function cadastrarAssembleia(event) {
@@ -292,6 +331,12 @@ export default function CondominioPage() {
       pauta: '',
     })
     recarregar()
+  }
+
+  function excluirDocumento(id) {
+    if (!confirm('Excluir este documento?')) return
+    excluirDocumentoDoCondominio(condominio.slug, id)
+    forceRefresh()
   }
 
   function fazerCheckin() {
@@ -353,8 +398,7 @@ export default function CondominioPage() {
     { id: 'contas', label: 'Contas', helper: 'Despesas e títulos' },
     { id: 'avisos', label: 'Avisos', helper: 'Comunicados' },
     { id: 'assembleias', label: 'Assembleias', helper: 'Atas e encontros' },
-    { id: 'visitas', label: 'Visitas', helper: 'Check-in de visitas' },
-    { id: 'lembretes', label: 'Lembretes', helper: 'O que não pode esquecer' },
+    { id: 'documentos', label: 'Documentos', helper: 'Atas e contratos' },
   ]
 
   const contasNormalizadas = condominio.contas.map((conta) => normalizarConta(conta))
@@ -412,6 +456,11 @@ export default function CondominioPage() {
     if (!filtrarPorData(conta, filtroContaDataInicio, filtroContaDataFim, 'vencimento')) return false
     return true
   })
+
+  // Documentos filtrados (simplificado)
+  const documentosFiltrados = Array.isArray(condominio?.documentos) ? [...condominio.documentos].sort((a, b) => 
+    String(b.data).localeCompare(String(a.data))
+  ) : []
 
   // Manutenções filtradas
   const manutencoesFiltradas = condominio.manutencoes.filter((manutencao) => {
@@ -567,41 +616,23 @@ export default function CondominioPage() {
 
         <button
           type="button"
-          aria-current={secaoAtiva === 'visitas' ? 'page' : undefined}
-          onClick={() => abrirSecao('visitas')}
+          aria-current={secaoAtiva === 'documentos' ? 'page' : undefined}
+          onClick={() => abrirSecao('documentos')}
           className={
-            secaoAtiva === 'visitas'
+            secaoAtiva === 'documentos'
               ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
               : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
           }
         >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-sm font-semibold">Visitas</p>
-              <p className="mt-1 text-xs text-white/62 hidden sm:block">Check-in de visitas</p>
+              <p className="text-sm font-semibold">Documentos</p>
+              <p className="mt-1 text-xs text-white/62 hidden sm:block">Atas e contratos</p>
             </div>
-            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">{(condominio.visitas || []).length.toString().padStart(2,'0')}</span>
+            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">{(condominio.documentos || []).length.toString().padStart(2,'0')}</span>
           </div>
         </button>
 
-        <button
-          type="button"
-          aria-current={secaoAtiva === 'lembretes' ? 'page' : undefined}
-          onClick={() => abrirSecao('lembretes')}
-          className={
-            secaoAtiva === 'lembretes'
-              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
-              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
-          }
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Lembretes</p>
-              <p className="mt-1 text-xs text-white/62 hidden sm:block">Ações importantes</p>
-            </div>
-            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">06</span>
-          </div>
-        </button>
       </nav>
 
       <div className="mt-4 rounded-[1.25rem] border border-cyan-300/18 bg-[linear-gradient(135deg,rgba(34,211,238,0.18),rgba(168,85,247,0.16))] p-4">
@@ -630,20 +661,31 @@ export default function CondominioPage() {
             reader.readAsDataURL(file)
           }} />
         </label>
-        <Link
-          href={`/condominios/${condominio.slug}/relatorio`}
-          className="block rounded-[1.25rem] border border-white/10 bg-white/6 p-3 text-center text-xs font-semibold text-white/70 hover:bg-white/12 transition"
-        >
-          📄 Gerar relatório
-        </Link>
       </div>
     </>
   )
 
   const headerActions = (
-    <div className="text-right text-sm">
-      <p className="text-[var(--muted)]">{condominio.cidade}{condominio.sindico ? ` · Síndico: ${condominio.sindico}` : ''}</p>
-      <p className="text-xs text-[var(--muted)] mt-0.5">{condominio.unidades} unidades</p>
+    <div className="flex items-center gap-4 text-right">
+      <div className="hidden md:block text-sm">
+        <p className="text-[var(--muted)]">{condominio.cidade}</p>
+        <p className="text-xs text-[var(--muted)] mt-0.5">{condominio.unidades} unidades</p>
+      </div>
+      <div className="flex gap-2 print:hidden">
+        <Link
+          href={`/condominios/${condominio.slug}/relatorio`}
+          className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-semibold text-[var(--panel-strong)] ring-1 ring-slate-200 transition hover:scale-105 hover:bg-slate-50 active:scale-95"
+        >
+          <span>📄 Relatório</span>
+        </Link>
+        <button
+          type="button"
+          onClick={fazerCheckin}
+          className="inline-flex items-center gap-2 rounded-full bg-[var(--panel-strong)] px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 transition hover:scale-105 hover:brightness-110 active:scale-95"
+        >
+          <span>📍 Check-in</span>
+        </button>
+      </div>
     </div>
   )
 
@@ -657,70 +699,36 @@ export default function CondominioPage() {
         headerActions={headerActions}
       >
       <div className="space-y-3">
-        <section className="rounded-[1.75rem] border border-slate-200/70 bg-[linear-gradient(135deg,rgba(15,82,255,0.08),rgba(34,211,238,0.08),rgba(249,115,22,0.08))] p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_10px_28px_rgba(15,23,42,0.08)] lg:hidden">
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[var(--accent-strong)]">
-                Acoes rapidas
-              </p>
-              <p className="mt-2 text-sm text-[var(--muted)]">
-                Use estes botoes para cadastrar rapidamente novos itens neste condominio.
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[var(--accent-strong)]">Check-in</p>
+              <h2 className="mt-1 text-lg font-semibold text-[var(--ink)]">Registrar presenca</h2>
+              <p className="mt-1 text-sm leading-5 text-[var(--muted)]">
+                Marque que voce esta neste condominio agora.
               </p>
             </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <QuickActionButton
-                label="Cadastrar conta"
-                active={painelAberto === 'conta'}
-                onClick={() =>
-                  (setSecaoAtiva('contas'),
-                  setPainelAberto((atual) => (atual === 'conta' ? '' : 'conta')))
-                }
-              />
-              <QuickActionButton
-                label="Cadastrar manutencao"
-                active={painelAberto === 'manutencao'}
-                onClick={() =>
-                  (setSecaoAtiva('manutencoes'),
-                  setPainelAberto((atual) => (atual === 'manutencao' ? '' : 'manutencao')))
-                }
-              />
-              <QuickActionButton
-                label="Cadastrar aviso"
-                active={painelAberto === 'aviso'}
-                onClick={() =>
-                  (setSecaoAtiva('avisos'),
-                  setPainelAberto((atual) => (atual === 'aviso' ? '' : 'aviso')))
-                }
-              />
-              <QuickActionButton
-                label="Cadastrar assembleia"
-                active={painelAberto === 'assembleia'}
-                onClick={() =>
-                  (setSecaoAtiva('assembleias'),
-                  setPainelAberto((atual) => (atual === 'assembleia' ? '' : 'assembleia')))
-                }
-              />
-              <span className="hidden lg:block h-6 w-px bg-slate-300" />
-              <button
-                type="button"
-                onClick={fazerCheckin}
-                className="rounded-full bg-[var(--panel-strong)] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
-              >
-                📍 Registrar visita
-              </button>
-              <Link
-                href={`/condominios/${condominio.slug}/relatorio`}
-                className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110"
-              >
-                📄 Gerar relatório
-              </Link>
-            </div>
+            <span className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-500">
+              {(condominio.visitas || []).length}
+            </span>
           </div>
+          <button
+            type="button"
+            onClick={fazerCheckin}
+            className="mt-4 w-full rounded-xl bg-[var(--panel-strong)] px-4 py-3 text-sm font-semibold text-white transition active:scale-[0.98]"
+          >
+            Fazer check-in
+          </button>
         </section>
 
         {secaoAtiva === 'resumo' ? (
           <section id="resumo" className="space-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+              <SummaryCard label="Unidades" value={condominio.unidades} />
+              <SummaryCard label="Contas Pendentes" value={contasNormalizadas.filter(c => c.status !== 'Paga').length} />
+              <SummaryCard label="Próx. Manutenção" value={proximaManutencao ? formatarData(proximaManutencao.proximaData) : '—'} />
+              <SummaryCard label="Próx. Assembleia" value={proximaAssembleia ? formatarData(proximaAssembleia.data) : '—'} />
+            </div>
 
             {/* Contas */}
             <ContentPanel title="Contas" actionLabel="Nova conta" actionOpen={painelAberto === 'conta'} onActionToggle={() => setPainelAberto((a) => (a === 'conta' ? '' : 'conta'))}>
@@ -1657,24 +1665,6 @@ export default function CondominioPage() {
         </section>
         ) : null}
 
-        {secaoAtiva === 'lembretes' ? (
-        <section id="lembretes">
-          <ContentPanel title="Lembretes do condomínio">
-            {lembretes.length === 0 ? (
-              <EmptyState text="Nenhum lembrete ativo no momento. Cadastre contas, manutenções ou assembleias para ver avisos aqui." />
-            ) : (
-              <div className="space-y-4">
-                {lembretes.map((item) => (
-                  <div key={item.id} className="rounded-2xl border border-[var(--line)] bg-[var(--soft)] p-5">
-                    <p className="text-lg font-semibold text-[var(--ink)]">{item.titulo}</p>
-                    <p className="mt-2 text-sm text-[var(--muted)]">{item.detalhe}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </ContentPanel>
-        </section>
-        ) : null}
       </div>
     </AdminShell>
 
@@ -1795,8 +1785,8 @@ function QuickActionButton({ label, active, onClick }) {
       onClick={onClick}
       className={
         active
-          ? 'rounded-full bg-[var(--panel-strong)] px-4 py-2 text-sm font-semibold text-white transition hover:brightness-110'
-          : 'rounded-full bg-white px-4 py-2 text-sm font-semibold text-[var(--panel-strong)] ring-1 ring-slate-200 transition hover:bg-[var(--soft)]'
+          ? 'rounded-xl bg-[var(--panel-strong)] px-3 py-2 text-sm font-semibold text-white transition hover:brightness-110 hover:scale-105'
+          : 'rounded-xl bg-white px-3 py-2 text-sm font-semibold text-[var(--panel-strong)] ring-1 ring-slate-200 transition hover:bg-slate-50 hover:scale-105'
       }
     >
       {label}
@@ -1812,14 +1802,14 @@ function ContentPanel({
   onActionToggle,
 }) {
   return (
-    <section className="rounded-[1.75rem] border border-black/5 bg-white/85 p-6 shadow-[0_18px_50px_rgba(71,47,24,0.08)]">
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_10px_28px_rgba(15,23,42,0.06)] sm:p-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold text-[var(--ink)]">{title}</h2>
         {actionLabel ? (
           <button
             type="button"
             onClick={onActionToggle}
-            className="inline-flex w-fit rounded-full bg-[var(--panel-strong)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:brightness-110"
+            className="inline-flex w-fit rounded-xl bg-[var(--panel-strong)] px-3 py-2 text-xs font-semibold text-white transition hover:brightness-110 hover:scale-105 active:scale-95"
           >
             {actionOpen ? 'Fechar' : actionLabel}
           </button>
@@ -1832,7 +1822,7 @@ function ContentPanel({
 
 function InlineFormWrap({ children }) {
   return (
-    <div className="rounded-[1.5rem] border border-[var(--line)] bg-[linear-gradient(180deg,rgba(34,211,238,0.06),rgba(255,255,255,0.85))] p-4">
+    <div className="rounded-2xl border border-[var(--line)] bg-slate-50 p-4">
       {children}
     </div>
   )
@@ -1842,7 +1832,7 @@ function FormPanel({ title, onSubmit, children, compact = false }) {
   return (
     <form
       onSubmit={onSubmit}
-      className={compact ? '' : 'rounded-[1.75rem] border border-black/5 bg-white/85 p-6 shadow-[0_18px_50px_rgba(71,47,24,0.08)]'}
+      className={compact ? '' : 'rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_10px_28px_rgba(15,23,42,0.06)]'}
     >
       <h3 className="text-lg font-semibold text-[var(--ink)]">{title}</h3>
       <div className="mt-5 space-y-4">{children}</div>
@@ -1863,7 +1853,7 @@ function SubmitButton({ label }) {
   return (
     <button
       type="submit"
-      className="w-full rounded-full bg-[var(--panel-strong)] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110"
+      className="w-full rounded-xl bg-[var(--panel-strong)] px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 hover:scale-105 active:scale-95"
     >
       {label}
     </button>

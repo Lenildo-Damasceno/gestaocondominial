@@ -1,25 +1,17 @@
-/**
- * app/condominios/page.js
- * 
- * Lista de condomínios (rota: /condominios)
- * - Exibe todos os condomínios cadastrados em cards coloridos (gradientes)
- * - Permite visualizar detalhes (link para /condominios/[slug])
- * - Funcionalidade de exclusão com confirmação de usuário
- * - Exclusão afeta apenas localStorage do navegador
- * - Cards com informações: nome, cidade, síndico, unidades
- * - Botões: "Ver detalhes" e ícone de exclusão
- */
-
 'use client'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import AdminShell from '@/views/components/admin-shell'
-import {
-  excluirCondominio,
-  formatarData,
-  listarCondominios,
-} from '@/controllers/condominio'
+import { excluirCondominio, listarCondominios } from '@/controllers/condominio'
+
+const coresCondominio = [
+  'bg-[#12365d] hover:bg-[#0f2f52]',
+  'bg-[#0f766e] hover:bg-[#115e59]',
+  'bg-[#7c2d12] hover:bg-[#6b2810]',
+  'bg-[#4338ca] hover:bg-[#3730a3]',
+  'bg-[#9f1239] hover:bg-[#881337]',
+]
 
 export default function CondominiosPage() {
   const [excluindo, setExcluindo] = useState('')
@@ -51,108 +43,72 @@ export default function CondominiosPage() {
   return (
     <AdminShell
       title="Condominios"
-      subtitle="Escolha abaixo o condominio que voce quer abrir. Cada bloco leva direto para a pagina daquele condominio."
+      subtitle="Escolha abaixo o condominio que voce quer abrir."
       currentPath="/condominios"
     >
-      <section className="rounded-[2rem] border border-slate-200/70 bg-white/90 p-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)] sm:p-8">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_12px_30px_rgba(15,23,42,0.06)] sm:p-6">
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--accent-strong)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--accent-strong)]">
               Sua carteira
             </p>
-            <h2 className="mt-3 text-2xl font-semibold text-[var(--panel-strong)] sm:text-3xl">
+            <h2 className="mt-2 text-xl font-semibold text-[var(--panel-strong)]">
               Selecione um condominio
             </h2>
-            <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--muted)]">
-              Toque ou clique no quadrado do condominio para entrar e ver somente as contas, manutencoes e avisos dele.
-            </p>
           </div>
-          <span className="inline-flex w-fit rounded-full bg-[var(--soft)] px-4 py-2 text-sm font-semibold text-[var(--ink)] ring-1 ring-slate-200">
-            {condominios.length} condominio(s)
+          <span className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-[var(--ink)]">
+            {condominios.length}
           </span>
         </div>
 
-        <div className="mt-8">
+        <div className="mt-5">
           {condominios.length === 0 ? (
-            <div className="rounded-[1.75rem] border border-dashed border-[var(--line)] bg-[var(--soft)] px-6 py-12 text-center">
-              <p className="text-lg font-semibold text-[var(--panel-strong)]">
+            <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--soft)] px-4 py-8 text-center">
+              <p className="text-sm font-semibold text-[var(--panel-strong)]">
                 Nenhum condominio cadastrado
-              </p>
-              <p className="mt-3 text-sm text-[var(--muted)]">
-                Cadastre um novo condominio no bloco do rodape desta pagina.
               </p>
             </div>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-              {condominios.map((condominio) => {
-                const proximaManutencao = condominio.manutencoes.find((item) => item.proximaData)
-
-                return (
-                  <Link
-                    key={condominio.id}
-                    href={`/condominios/${condominio.slug}`}
-                    className="group relative overflow-hidden rounded-2xl bg-[linear-gradient(135deg,#1e3a5f,#1a5276)] p-4 shadow-[0_4px_20px_rgba(26,82,118,0.25)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_8px_28px_rgba(26,82,118,0.4)] cursor-pointer block"
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {condominios.map((condominio, index) => (
+                <Link
+                  key={condominio.id}
+                  href={`/condominios/${condominio.slug}`}
+                  className={`flex min-h-10 items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm font-semibold text-white shadow-sm transition active:scale-[0.99] ${coresCondominio[index % coresCondominio.length]}`}
+                >
+                  <span className="min-w-0 truncate">{condominio.nome}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      removerCondominio(condominio.slug, condominio.nome)
+                    }}
+                    disabled={excluindo === condominio.slug}
+                    className="shrink-0 rounded-lg bg-white/12 px-2 py-1 text-[11px] font-semibold text-white/75 transition hover:bg-white/18 hover:text-white disabled:opacity-50"
                   >
-                    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
-
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-[11px] font-semibold text-blue-100">
-                        {condominio.unidades} und
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.preventDefault(); removerCondominio(condominio.slug, condominio.nome) }}
-                        disabled={excluindo === condominio.slug}
-                        className="text-[11px] font-semibold text-red-300 transition hover:text-red-200 disabled:opacity-50"
-                      >
-                        {excluindo === condominio.slug ? 'Excluindo...' : 'Excluir'}
-                      </button>
-                    </div>
-
-                    <h3 className="mt-3 text-base font-semibold leading-snug text-white transition group-hover:text-blue-200">
-                      {condominio.nome}
-                    </h3>
-
-                    <div className="mt-2 space-y-0.5 text-xs text-blue-200/70">
-                      <p>{condominio.cidade}</p>
-                      <p>Síndico: {condominio.sindico}</p>
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
-                      <span className="text-xs text-blue-200/60">
-                        {proximaManutencao
-                          ? formatarData(proximaManutencao.proximaData)
-                          : 'Sem manutenção'}
-                      </span>
-                      <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white">
-                        Abrir →
-                      </span>
-                    </div>
-                  </Link>
-                )
-              })}
+                    {excluindo === condominio.slug ? '...' : 'Excluir'}
+                  </button>
+                </Link>
+              ))}
             </div>
           )}
         </div>
       </section>
 
-      <section className="mt-8 rounded-[2rem] border border-slate-200/70 bg-[linear-gradient(135deg,rgba(15,82,255,0.1),rgba(34,211,238,0.08),rgba(249,115,22,0.08))] p-6 shadow-[0_20px_55px_rgba(15,23,42,0.08)] sm:p-8">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--accent-strong)]">
+      <section className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-[0_12px_30px_rgba(15,23,42,0.06)] sm:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--accent-strong)]">
               Cadastro
             </p>
-            <h2 className="mt-3 text-2xl font-semibold text-[var(--panel-strong)]">
+            <h2 className="mt-2 text-lg font-semibold text-[var(--panel-strong)]">
               Cadastrar condominio novo
             </h2>
-            <p className="mt-3 text-sm leading-7 text-[var(--muted)]">
-              Se entrou um novo cliente na sua administracao, use este botao para criar mais um condominio na lista acima.
-            </p>
           </div>
 
           <Link
             href="/condominios/novo"
-            className="inline-flex w-full items-center justify-center rounded-full bg-[var(--panel-strong)] px-6 py-4 text-sm font-semibold text-white transition hover:brightness-110 sm:w-auto"
+            className="inline-flex w-full items-center justify-center rounded-xl bg-[var(--panel-strong)] px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 sm:w-auto"
           >
             Cadastrar condominio
           </Link>

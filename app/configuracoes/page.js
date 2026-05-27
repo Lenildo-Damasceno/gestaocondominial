@@ -180,7 +180,7 @@ export default function ConfiguracoesPage() {
                   className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
                 >
                   <option value="Administrador">Administrador</option>
-                  <option value="Operador">Operador</option>
+                  <option value="Zeladoria/Portaria">Equipe Operacional</option>
                 </select>
               </div>
 
