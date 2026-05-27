@@ -21,7 +21,7 @@ export function SubmitButton({ label }) {
   return (
     <button
       type="submit"
-      className="w-full rounded-full bg-[var(--panel-strong)] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110"
+      className="w-full rounded-full bg-[var(--panel-strong)] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 hover:scale-105 active:scale-95"
     >
       {label}
     </button>
@@ -70,7 +70,7 @@ export function ContentPanel({ title, children, actionLabel, actionOpen = false,
           <button
             type="button"
             onClick={onActionToggle}
-            className="inline-flex w-fit rounded-full bg-[var(--panel-strong)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:brightness-110"
+            className="inline-flex w-fit rounded-full bg-[var(--panel-strong)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:brightness-110 hover:scale-105 active:scale-95"
           >
             {actionOpen ? 'Fechar' : actionLabel}
           </button>
@@ -98,5 +98,19 @@ export function FormPanel({ title, onSubmit, children, compact = false }) {
       <h3 className="text-lg font-semibold text-[var(--ink)]">{title}</h3>
       <div className="mt-5 space-y-4">{children}</div>
     </form>
+  )
+}
+
+export function Checkbox({ checked, onChange, label }) {
+  return (
+    <label className="flex items-center gap-2 cursor-pointer select-none">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+        className="h-5 w-5 rounded-lg border-[var(--line)] bg-[var(--soft)] text-[var(--accent-strong)] transition focus:ring-2 focus:ring-[var(--accent)]/30"
+      />
+      {label && <span className="text-sm font-medium text-[var(--ink)]">{label}</span>}
+    </label>
   )
 }

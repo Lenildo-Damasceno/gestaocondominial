@@ -50,3 +50,31 @@ body {
 a {
   text-decoration: none;
 }
+
+/* Cursor pointer para elementos clicáveis */
+button,
+a,
+[role="button"],
+[type="button"],
+[type="submit"],
+[type="reset"],
+label[for],
+select,
+.cursor-pointer {
+  cursor: pointer;
+}
+
+/* Cursor pointer para elementos interativos */
+input[type="checkbox"],
+input[type="radio"],
+input[type="file"] {
+  cursor: pointer;
+}
+
+/* Cursor padrão para inputs desabilitados */
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+}
