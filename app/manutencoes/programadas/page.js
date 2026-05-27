@@ -1,18 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import AdminShell from '@/views/components/admin-shell'
 import { formatarData, listarCondominios } from '@/controllers/condominio'
 
 export default function ManutencoesProgramadasPage() {
-  const [manutencoes, setManutencoes] = useState([])
-
-  useEffect(() => {
-    const dados = listarCondominios()
+  const [manutencoes] = useState(() =>
+    listarCondominios()
       .flatMap((c) => c.manutencoes.map((m) => ({ ...m, condominio: c.nome })))
       .filter((m) => m.status === 'Programada' || m.status === 'Agendada')
-    setManutencoes(dados)
-  }, [])
+  )
 
   const statusClass = (status) =>
     status === 'Agendada' ? 'bg-blue-100 text-blue-700' : 'bg-cyan-100 text-cyan-700'

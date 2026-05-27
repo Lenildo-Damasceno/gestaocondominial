@@ -7,8 +7,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useSession, signOut } from '@/controllers/auth'
-import { supabaseConfigError } from '@/models/supabase'
+import { useSession, signOut } from '@/lib/useAuth'
+import { supabaseConfigError } from '@/lib/supabase'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', helper: 'Tela inicial', badge: '01' },

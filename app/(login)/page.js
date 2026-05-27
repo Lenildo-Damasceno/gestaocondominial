@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { signIn, sendPasswordReset, useSession } from '@/controllers/auth'
+import { signIn, sendPasswordReset, useSession } from '@/lib/useAuth'
 
 const RATE_LIMIT_SEGUNDOS = 30
 const MAX_TENTATIVAS = 3
@@ -49,6 +49,7 @@ export default function Login() {
       setTentativas(novasTentativas)
       if (novasTentativas >= MAX_TENTATIVAS) {
         setBloqueadoAte(Date.now() + RATE_LIMIT_SEGUNDOS * 1000)
+        setTempoRestante(RATE_LIMIT_SEGUNDOS)
         setErro(`Muitas tentativas. Aguarde ${RATE_LIMIT_SEGUNDOS} segundos.`)
       } else {
         setErro(`${error} (${novasTentativas}/${MAX_TENTATIVAS} tentativas)`)
@@ -69,7 +70,7 @@ export default function Login() {
     setResetEnviado(true)
   }
 
-  const bloqueado = bloqueadoAte && Date.now() < bloqueadoAte
+  const bloqueado = Boolean(bloqueadoAte && tempoRestante > 0)
 
   if (verificandoSessao) return null
 
@@ -95,13 +96,7 @@ export default function Login() {
 
           {/* Logo / Marca */}
           <div className="mb-8 flex flex-col items-center text-center">
-            <div className="mb-4 flex items-center gap-4">
-              <img src="/assets/logo_es.png" alt="ES Gestão Condominial" className="h-20 w-20 object-contain" />
-              <h1 className="text-3xl font-bold tracking-tight text-white">ES Gestão Condominial</h1>
-            </div>
-            <p className="text-sm text-white/40">
-              {modoReset ? 'Redefinição de senha' : 'Painel administrativo'}
-            </p>
+            <img src="/assets/logo_es.png" alt="ES Gestão Condominial" className="h-40 w-40 object-contain" />
           </div>
 
           {resetEnviado ? (
@@ -240,4 +235,3 @@ export default function Login() {
     </div>
   )
 }
-

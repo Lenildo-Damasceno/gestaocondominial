@@ -1,27 +1,23 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import AdminShell from '@/views/components/admin-shell'
 import DetalheModal from '@/views/components/detalhe-modal'
 import { useSession } from '@/lib/useAuth'
+import { useCondominios } from '@/lib/useCondominios'
 import {
   calcularDiasParaData,
   formatarData,
   formatarMoeda,
-  listarCondominios,
   normalizarConta,
   resumirUrgenciaConta,
 } from '@/controllers/condominio'
 
 export default function DashboardPage() {
   const { user } = useSession()
-  const [condominios, setCondominios] = useState([])
+  const condominios = useCondominios()
   const [modal, setModal] = useState(null)
-
-  useEffect(() => {
-    setCondominios(listarCondominios())
-  }, [])
 
   function abrirModal(item, tipo, slug) {
     setModal({ item, tipo, slug })
@@ -29,7 +25,6 @@ export default function DashboardPage() {
 
   function fecharModal() {
     setModal(null)
-    setCondominios(listarCondominios())
   }
 
   const dados = useMemo(() => {
@@ -69,7 +64,7 @@ export default function DashboardPage() {
       })
       .sort((a, b) => calcularDiasParaData(a.proximaData) - calcularDiasParaData(b.proximaData))
 
-    const STATUS_CRITICO = ['Não realizada', 'Pendente', 'Atrasada']
+    const STATUS_CRITICO = ['Não realizada', 'Atrasada']
     const manutencoesAlerta = todasManutencoes.filter((m) => STATUS_CRITICO.includes(m.status))
 
     const proximasContas = [...todasContas]
@@ -171,7 +166,7 @@ export default function DashboardPage() {
           <MetricCard label="Condomínios" value={dados.totalCondominios} helper="Na sua carteira" tone="blue" />
           <MetricCard label="Unidades" value={dados.totalUnidades} helper="Total administrado" tone="cyan" />
           <MetricCard label="Vencem hoje" value={dados.contasVencidasHoje} helper="Contas para pagar" tone={dados.contasVencidasHoje > 0 ? 'red' : 'green'} />
-          <MetricCard label="Manutenções críticas" value={dados.manutencoesAtrasadas} helper="Pendentes ou atrasadas" tone={dados.manutencoesAtrasadas > 0 ? 'amber' : 'green'} />
+          <MetricCard label="Manutenções críticas" value={dados.manutencoesAtrasadas} helper="Atrasadas ou não realizadas" tone={dados.manutencoesAtrasadas > 0 ? 'amber' : 'green'} />
         </div>
 
         {/* Condomínios — acesso rápido */}

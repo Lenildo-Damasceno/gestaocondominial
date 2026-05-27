@@ -13,9 +13,10 @@
 'use client'
 
 import Link from 'next/link'
-import React, { useReducer, useState, useRef } from 'react'
+import React, { useReducer, useState, useRef, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { useSession } from '@/lib/useAuth'
+import { registrarLog } from '@/controllers/logs'
 import AdminShell from '@/views/components/admin-shell'
 import DetalheModal from '@/views/components/detalhe-modal'
 import {
@@ -31,6 +32,7 @@ import {
   registrarHistoricoManutencao,
   adicionarDocumentoAoCondominio,
   excluirDocumentoDoCondominio,
+  registrarVisita,
   excluirVisita,
   editarVisita,
   atualizarCondominio,
@@ -78,6 +80,12 @@ export default function CondominioPage() {
     data: '',
     descricao: '',
   })
+  const [ocorrenciaForm, setOcorrenciaForm] = useState({
+    assunto: '',
+    funcionario: '',
+    ocorrencia: '',
+    data: '',
+  })
   const [contratoForm, setContratoForm] = useState({
     empresa: '',
     servico: '',
@@ -90,6 +98,7 @@ export default function CondominioPage() {
   })
   const [contratoVisualizando, setContratoVisualizando] = useState(null)
   const fileInputContratoRef = useRef(null)
+  const fileInputDocRef = useRef(null)
   const [assembleiaForm, setAssembleiaForm] = useState({
     titulo: '',
     data: '',
@@ -146,18 +155,12 @@ export default function CondominioPage() {
   const nomeUsuario = user?.user_metadata?.full_name || user?.email || 'Usuário'
   const condominio = slug ? buscarCondominioPorSlug(slug) : null
   
-  React.useEffect(() => {
-    if (condominio && painelAberto === 'dados' && Object.keys(dadosEditForm).length === 0) {
-      setDadosEditForm({
-        nome: condominio.nome,
-        sindico: condominio.sindico || '',
-        endereco: condominio.endereco || '',
-        cidade: condominio.cidade || '',
-        unidades: condominio.unidades || '',
-      })
+  useEffect(() => {
+    if (user && condominio) {
+      registrarLog(user.id, 'VER_CONDOMINIO', condominio.id, `Acessou condomínio: ${condominio.nome}`).catch(() => {})
     }
-  }, [painelAberto, condominio?.slug])
-
+  }, [user?.id, condominio?.id])
+  
   function abrirEdicaoDados() {
     if (!condominio) return
     setDadosEditForm({
@@ -180,6 +183,9 @@ export default function CondominioPage() {
       cidade: dadosEditForm.cidade,
       unidades: dadosEditForm.unidades ? parseInt(dadosEditForm.unidades) : c.unidades,
     }))
+    if (user) {
+      registrarLog(user.id, 'EDITAR_CONDOMINIO', condominio.id, 'Editou informações do condomínio').catch(() => {})
+    }
     forceRefresh()
     setPainelAberto('')
   }
@@ -401,6 +407,36 @@ export default function CondominioPage() {
     recarregar()
   }
 
+  function cadastrarOcorrencia(event) {
+    event.preventDefault()
+    atualizarCondominio(condominio.slug, (c) => ({
+      ...c,
+      ocorrencias: [
+        {
+          id: `ocorrencia-${Date.now()}`,
+          ...ocorrenciaForm,
+        },
+        ...(c.ocorrencias || []),
+      ],
+    }))
+    setOcorrenciaForm({
+      assunto: '',
+      funcionario: '',
+      ocorrencia: '',
+      data: '',
+    })
+    recarregar()
+  }
+
+  function excluirOcorrencia(id) {
+    if (!confirm('Excluir esta ocorrência?')) return
+    atualizarCondominio(condominio.slug, (c) => ({
+      ...c,
+      ocorrencias: (c.ocorrencias || []).filter((item) => item.id !== id),
+    }))
+    forceRefresh()
+  }
+
   function cadastrarDocumento(event) {
     event.preventDefault()
     adicionarDocumentoAoCondominio(condominio.slug, documentoForm)
@@ -510,11 +546,9 @@ export default function CondominioPage() {
     .sort((a, b) => String(a.data).localeCompare(String(b.data)))[0]
 
   // Calcular totalRecorrentes diretamente dos dados brutos para evitar diferenças de hidratação
-  const totalRecorrentes = React.useMemo(() => {
-    return condominio.contas.filter(
-      (conta) => conta.recorrencia === 'mensal-indeterminada'
-    ).length
-  }, [condominio.contas])
+  const totalRecorrentes = condominio.contas.filter(
+    (conta) => conta.recorrencia === 'mensal-indeterminada'
+  ).length
 
   const manutencoesProgramadas = condominio.manutencoes.filter(
     (item) => item.proximaData || item.status === 'Agendada' || item.status === 'Programada'
@@ -605,32 +639,23 @@ export default function CondominioPage() {
 
   const sidebar = (
     <>
-      <section className="rounded-[1.5rem] border border-white/10 bg-white/6 p-4 sm:p-5">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.4em] text-[var(--accent)]">Condomínio ativo</p>
-        <h2 className="mt-3 text-2xl font-semibold tracking-tight">{condominio.nome}</h2>
-        <p className="mt-3 text-sm leading-6 text-white/68">
-          Navegue rapidamente entre as áreas desse condomínio e veja os principais detalhes.
-        </p>
+      <section className="px-2 mb-4 mt-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--accent)] mb-1">Condomínio ativo</p>
+        <h2 className="text-xl font-semibold tracking-tight leading-none text-white">{condominio.nome}</h2>
       </section>
 
-      <nav aria-label="Navegação do condomínio" className="mt-4 grid gap-2">
+      <nav aria-label="Navegação do condomínio" className="flex gap-2 overflow-x-auto pb-2 snap-x lg:grid lg:gap-2 lg:pb-0 lg:overflow-visible lg:snap-none hide-scrollbar">
         <button
           type="button"
           aria-current={secaoAtiva === 'resumo' ? 'page' : undefined}
           onClick={() => abrirSecao('resumo')}
           className={
             secaoAtiva === 'resumo'
-              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
-              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
+              ? 'rounded-xl bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-2.5 text-left text-white transition shrink-0 min-w-[120px] snap-start lg:w-full'
+              : 'rounded-xl bg-white/10 px-4 py-2.5 text-left text-white/82 transition hover:bg-white/16 shrink-0 min-w-[120px] snap-start lg:w-full'
           }
         >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Resumo</p>
-              <p className="mt-1 text-xs text-white/62 hidden sm:block">Visão geral do condomínio</p>
-            </div>
-            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">01</span>
-          </div>
+          <span className="text-sm font-semibold">Resumo</span>
         </button>
 
         <button
@@ -639,17 +664,11 @@ export default function CondominioPage() {
           onClick={() => abrirSecao('contas')}
           className={
             secaoAtiva === 'contas'
-              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
-              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
+              ? 'rounded-xl bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-2.5 text-left text-white transition shrink-0 min-w-[120px] snap-start lg:w-full'
+              : 'rounded-xl bg-white/10 px-4 py-2.5 text-left text-white/82 transition hover:bg-white/16 shrink-0 min-w-[120px] snap-start lg:w-full'
           }
         >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Contas</p>
-              <p className="mt-1 text-xs text-white/62 hidden sm:block">Despesas do condomínio</p>
-            </div>
-            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">02</span>
-          </div>
+          <span className="text-sm font-semibold">Contas</span>
         </button>
 
         <button
@@ -658,17 +677,11 @@ export default function CondominioPage() {
           onClick={() => abrirSecao('contratos')}
           className={
             secaoAtiva === 'contratos'
-              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
-              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
+              ? 'rounded-xl bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-2.5 text-left text-white transition shrink-0 min-w-[120px] snap-start lg:w-full'
+              : 'rounded-xl bg-white/10 px-4 py-2.5 text-left text-white/82 transition hover:bg-white/16 shrink-0 min-w-[120px] snap-start lg:w-full'
           }
         >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Contratos</p>
-              <p className="mt-1 text-xs text-white/62 hidden sm:block">Gestão de fornecedores</p>
-            </div>
-            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">{(condominio.contratos || []).length.toString().padStart(2,'0')}</span>
-          </div>
+          <span className="text-sm font-semibold">Contratos</span>
         </button>
 
         <button
@@ -677,17 +690,11 @@ export default function CondominioPage() {
           onClick={() => abrirSecao('manutencoes')}
           className={
             secaoAtiva === 'manutencoes'
-              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
-              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
+              ? 'rounded-xl bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-2.5 text-left text-white transition shrink-0 min-w-[120px] snap-start lg:w-full'
+              : 'rounded-xl bg-white/10 px-4 py-2.5 text-left text-white/82 transition hover:bg-white/16 shrink-0 min-w-[120px] snap-start lg:w-full'
           }
         >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Manutenções</p>
-              <p className="mt-1 text-xs text-white/62 hidden sm:block">Programadas e recorrentes</p>
-            </div>
-            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">03</span>
-          </div>
+          <span className="text-sm font-semibold">Manutenções</span>
         </button>
 
         <button
@@ -696,17 +703,24 @@ export default function CondominioPage() {
           onClick={() => abrirSecao('avisos')}
           className={
             secaoAtiva === 'avisos'
-              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
-              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
+              ? 'rounded-xl bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-2.5 text-left text-white transition shrink-0 min-w-[120px] snap-start lg:w-full'
+              : 'rounded-xl bg-white/10 px-4 py-2.5 text-left text-white/82 transition hover:bg-white/16 shrink-0 min-w-[120px] snap-start lg:w-full'
           }
         >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Avisos</p>
-              <p className="mt-1 text-xs text-white/62 hidden sm:block">Comunicados</p>
-            </div>
-            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">04</span>
-          </div>
+          <span className="text-sm font-semibold">Avisos</span>
+        </button>
+
+        <button
+          type="button"
+          aria-current={secaoAtiva === 'ocorrencias' ? 'page' : undefined}
+          onClick={() => abrirSecao('ocorrencias')}
+          className={
+            secaoAtiva === 'ocorrencias'
+              ? 'rounded-xl bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-2.5 text-left text-white transition shrink-0 min-w-[120px] snap-start lg:w-full'
+              : 'rounded-xl bg-white/10 px-4 py-2.5 text-left text-white/82 transition hover:bg-white/16 shrink-0 min-w-[120px] snap-start lg:w-full'
+          }
+        >
+          <span className="text-sm font-semibold">Ocorrências</span>
         </button>
 
         <button
@@ -715,17 +729,11 @@ export default function CondominioPage() {
           onClick={() => abrirSecao('assembleias')}
           className={
             secaoAtiva === 'assembleias'
-              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
-              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
+              ? 'rounded-xl bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-2.5 text-left text-white transition shrink-0 min-w-[120px] snap-start lg:w-full'
+              : 'rounded-xl bg-white/10 px-4 py-2.5 text-left text-white/82 transition hover:bg-white/16 shrink-0 min-w-[120px] snap-start lg:w-full'
           }
         >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Assembleias</p>
-              <p className="mt-1 text-xs text-white/62 hidden sm:block">Atas e reuniões</p>
-            </div>
-            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">05</span>
-          </div>
+          <span className="text-sm font-semibold">Assembleias</span>
         </button>
 
         <button
@@ -734,17 +742,24 @@ export default function CondominioPage() {
           onClick={() => abrirSecao('documentos')}
           className={
             secaoAtiva === 'documentos'
-              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
-              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
+              ? 'rounded-xl bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-2.5 text-left text-white transition shrink-0 min-w-[120px] snap-start lg:w-full'
+              : 'rounded-xl bg-white/10 px-4 py-2.5 text-left text-white/82 transition hover:bg-white/16 shrink-0 min-w-[120px] snap-start lg:w-full'
           }
         >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Documentos</p>
-              <p className="mt-1 text-xs text-white/62 hidden sm:block">Atas e contratos</p>
-            </div>
-            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">{(condominio.documentos || []).length.toString().padStart(2,'0')}</span>
-          </div>
+          <span className="text-sm font-semibold">Documentos</span>
+        </button>
+
+        <button
+          type="button"
+          aria-current={secaoAtiva === 'visitas' ? 'page' : undefined}
+          onClick={() => abrirSecao('visitas')}
+          className={
+            secaoAtiva === 'visitas'
+              ? 'rounded-xl bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-2.5 text-left text-white transition shrink-0 min-w-[120px] snap-start lg:w-full'
+              : 'rounded-xl bg-white/10 px-4 py-2.5 text-left text-white/82 transition hover:bg-white/16 shrink-0 min-w-[120px] snap-start lg:w-full'
+          }
+        >
+          <span className="text-sm font-semibold">Visitas</span>
         </button>
 
         <button
@@ -753,48 +768,13 @@ export default function CondominioPage() {
           onClick={() => abrirSecao('dados')}
           className={
             secaoAtiva === 'dados'
-              ? 'rounded-[1.5rem] bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-3 text-left text-white transition'
-              : 'rounded-[1.5rem] bg-white/10 px-4 py-3 text-left text-white/82 transition hover:bg-white/16'
+              ? 'rounded-xl bg-[linear-gradient(135deg,var(--accent-strong),var(--accent))] px-4 py-2.5 text-left text-white transition shrink-0 min-w-[120px] snap-start lg:w-full'
+              : 'rounded-xl bg-white/10 px-4 py-2.5 text-left text-white/82 transition hover:bg-white/16 shrink-0 min-w-[120px] snap-start lg:w-full'
           }
         >
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Dados</p>
-              <p className="mt-1 text-xs text-white/62 hidden sm:block">Editar informações</p>
-            </div>
-            <span className="rounded-full bg-black/15 px-3 py-1 text-[11px] font-semibold tracking-[0.25em] text-white/72">07</span>
-          </div>
+          <span className="text-sm font-semibold">Dados</span>
         </button>
-
       </nav>
-
-      <div className="mt-4 rounded-[1.25rem] border border-cyan-300/18 bg-[linear-gradient(135deg,rgba(34,211,238,0.18),rgba(168,85,247,0.16))] p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.35em] text-cyan-200">Dados rápidos</p>
-        <p className="mt-3 text-sm text-white/82">Síndico: {condominio.sindico}</p>
-        <p className="mt-2 text-sm text-white/82">Unidades: {condominio.unidades}</p>
-        <p className="mt-2 text-sm text-white/82">Cidade: {condominio.cidade}</p>
-      </div>
-
-      <div className="mt-3 space-y-2">
-        <label className="block cursor-pointer rounded-[1.25rem] border border-white/10 bg-white/6 p-3 text-center text-xs font-semibold text-white/70 hover:bg-white/12 transition">
-          {condominio.foto ? (
-            <img src={condominio.foto} alt="Logo" className="mx-auto mb-2 h-16 w-16 rounded-full object-cover" />
-          ) : (
-            <span className="block mb-1 text-2xl">🏗️</span>
-          )}
-          {condominio.foto ? 'Trocar foto' : 'Adicionar foto/logo'}
-          <input type="file" accept="image/*" className="hidden" onChange={(e) => {
-            const file = e.target.files?.[0]
-            if (!file) return
-            const reader = new FileReader()
-            reader.onload = (ev) => {
-              atualizarCondominio(condominio.slug, (c) => ({ ...c, foto: ev.target.result }))
-              forceRefresh()
-            }
-            reader.readAsDataURL(file)
-          }} />
-        </label>
-      </div>
     </>
   )
 
@@ -1674,6 +1654,58 @@ export default function CondominioPage() {
         </section>
         ) : null}
 
+        {secaoAtiva === 'ocorrencias' ? (
+        <section id="ocorrencias">
+          <ContentPanel
+            title="Ocorrências"
+            actionLabel="Nova ocorrência"
+            actionOpen={painelAberto === 'ocorrencia'}
+            onActionToggle={() => setPainelAberto((atual) => (atual === 'ocorrencia' ? '' : 'ocorrencia'))}
+          >
+            {painelAberto === 'ocorrencia' ? (
+              <InlineFormWrap>
+                <FormPanel title="Registrar nova ocorrência" onSubmit={cadastrarOcorrencia} compact>
+                  <Field label="Assunto">
+                    <input value={ocorrenciaForm.assunto} onChange={(e) => atualizarForm(setOcorrenciaForm, 'assunto', e.target.value)} className={inputClass} placeholder="Qual é a ocorrência?" required />
+                  </Field>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Funcionário do horário">
+                      <input value={ocorrenciaForm.funcionario} onChange={(e) => atualizarForm(setOcorrenciaForm, 'funcionario', e.target.value)} className={inputClass} placeholder="Nome do funcionário" required />
+                    </Field>
+                    <Field label="Data da ocorrência">
+                      <input type="date" value={ocorrenciaForm.data} onChange={(e) => atualizarForm(setOcorrenciaForm, 'data', e.target.value)} className={inputClass} required />
+                    </Field>
+                  </div>
+                  <Field label="A ocorrência">
+                    <textarea value={ocorrenciaForm.ocorrencia} onChange={(e) => atualizarForm(setOcorrenciaForm, 'ocorrencia', e.target.value)} className={`${inputClass} min-h-28`} placeholder="Descreva os detalhes da ocorrência" required />
+                  </Field>
+                  <SubmitButton label="Salvar ocorrência" />
+                </FormPanel>
+              </InlineFormWrap>
+            ) : null}
+            {!(condominio.ocorrencias || []).length ? (
+              <EmptyState text="Nenhuma ocorrência registrada." />
+            ) : (
+              (condominio.ocorrencias || []).map((ocorrencia) => (
+                <div key={ocorrencia.id} className="rounded-2xl border border-[var(--line)] bg-[var(--soft)] p-4 mb-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="font-medium text-[var(--ink)]">{ocorrencia.assunto}</p>
+                      <p className="mt-1 text-sm text-[var(--muted)]">Funcionário: {ocorrencia.funcionario}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <p className="text-sm text-[var(--muted)]">{formatarData(ocorrencia.data)}</p>
+                      <button type="button" onClick={() => excluirOcorrencia(ocorrencia.id)} className="text-xs font-semibold text-red-400 hover:text-red-600">Excluir</button>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{ocorrencia.ocorrencia}</p>
+                </div>
+              ))
+            )}
+          </ContentPanel>
+        </section>
+        ) : null}
+
         {secaoAtiva === 'assembleias' ? (
         <section id="assembleias">
           <ContentPanel
@@ -1904,11 +1936,15 @@ export default function CondominioPage() {
         {secaoAtiva === 'visitas' ? (
         <section id="visitas">
           <ContentPanel
-            title="Visitas realizadas"
+            title="Visitas e check-ins"
             actionLabel="Fazer check-in agora"
             actionOpen={false}
             onActionToggle={fazerCheckin}
           >
+            <p className="mb-3 text-sm leading-6 text-[var(--muted)]">
+              Registre novas visitas, consulte o histórico, edite observações ou exclua lançamentos incorretos.
+            </p>
+
             {/* Filtros */}
             <div className="rounded-2xl border border-cyan-200 bg-cyan-50/50 p-4 space-y-3">
               <p className="text-sm font-semibold text-[var(--ink)]">🔍 Filtros de busca</p>

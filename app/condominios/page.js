@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import Link from 'next/link'
 import AdminShell from '@/views/components/admin-shell'
-import { listarCondominios } from '@/controllers/condominio'
+import { registrarLog } from '@/controllers/logs'
+import { useCondominios } from '@/lib/useCondominios'
+import { useSession } from '@/lib/useAuth'
 
 const coresCondominio = [
   'from-[#0f52ff] to-[#22d3ee]',
@@ -14,11 +16,27 @@ const coresCondominio = [
 ]
 
 export default function CondominiosPage() {
-  const [condominios, setCondominios] = useState([])
+  const condominios = useCondominios()
+  const { user, permissoes, carregando: verificandoSessao } = useSession()
 
   useEffect(() => {
-    setCondominios(listarCondominios())
-  }, [])
+    if (user) {
+      registrarLog(user.id, 'VER_LISTAGEM_CONDOMINIOS', null, 'Acessou listagem de condomínios').catch(() => {})
+    }
+  }, [user])
+
+  // Filtrar condomínios baseado em permissões e role
+  const isAdmin = user?.role === 'admin' || user?.user_metadata?.papel === 'Administrador'
+  const temPermissoesConfiguradas = Array.isArray(permissoes) && permissoes.length > 0
+  const condominiosFiltrados = isAdmin || !temPermissoesConfiguradas ? condominios : condominios.filter(cond => {
+    // Admin vê todos
+    if (user?.role === 'admin') {
+      return true
+    }
+    // Não-admin vê apenas os que tem permissão
+    return permissoes?.includes(cond.id) || false
+  })
+  const semPermissoes = !verificandoSessao && condominios.length > 0 && condominiosFiltrados.length === 0
 
   return (
     <AdminShell
@@ -37,12 +55,24 @@ export default function CondominiosPage() {
             </h2>
           </div>
           <span className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-[var(--ink)]">
-            {condominios.length}
+            {condominiosFiltrados.length}
           </span>
         </div>
 
         <div className="mt-5">
-          {condominios.length === 0 ? (
+          {verificandoSessao ? (
+            <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--soft)] px-4 py-8 text-center">
+              <p className="text-sm font-semibold text-[var(--panel-strong)]">
+                Carregando condomínios...
+              </p>
+            </div>
+          ) : semPermissoes ? (
+            <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--soft)] px-4 py-8 text-center">
+              <p className="text-sm font-semibold text-[var(--panel-strong)]">
+                Você não tem acesso a nenhum condomínio. Contate o administrador.
+              </p>
+            </div>
+          ) : condominiosFiltrados.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--soft)] px-4 py-8 text-center">
               <p className="text-sm font-semibold text-[var(--panel-strong)]">
                 Nenhum condominio cadastrado
@@ -50,7 +80,7 @@ export default function CondominiosPage() {
             </div>
           ) : (
             <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-              {condominios.map((condominio, index) => (
+              {condominiosFiltrados.map((condominio, index) => (
                 <Link
                   key={condominio.id}
                   href={`/condominios/${condominio.slug}`}

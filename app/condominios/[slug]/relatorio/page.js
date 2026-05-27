@@ -10,6 +10,15 @@ export default function RelatorioPage() {
   const slug = Array.isArray(params.slug) ? params.slug[0] : params.slug
   const condominio = slug ? buscarCondominioPorSlug(slug) : null
 
+  // Estados para controlar a visibilidade das seções
+  const [showContas, setShowContas] = useState(true)
+  const [showManutencoesRealizadas, setShowManutencoesRealizadas] = useState(true)
+  const [showProximasManutencoes, setShowProximasManutencoes] = useState(true)
+  const [showAvisos, setShowAvisos] = useState(true)
+  const [showAssembleias, setShowAssembleias] = useState(true)
+  const [showVisitas, setShowVisitas] = useState(true)
+  const hoje = new Date().toLocaleDateString('pt-BR')
+
   if (!condominio) {
     return (
       <div className="p-8 text-center">
@@ -21,15 +30,6 @@ export default function RelatorioPage() {
 
   const contasNormalizadas = condominio.contas.map(normalizarConta)
   const visitas = condominio.visitas || []
-
-  // Estados para controlar a visibilidade das seções
-  const [showContas, setShowContas] = useState(true)
-  const [showManutencoesRealizadas, setShowManutencoesRealizadas] = useState(true)
-  const [showProximasManutencoes, setShowProximasManutencoes] = useState(true)
-  const [showAvisos, setShowAvisos] = useState(true)
-  const [showAssembleias, setShowAssembleias] = useState(true)
-  const [showVisitas, setShowVisitas] = useState(true)
-  const hoje = new Date().toLocaleDateString('pt-BR')
 
   return (
     <div className="min-h-screen bg-white">

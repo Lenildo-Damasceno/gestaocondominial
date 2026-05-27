@@ -63,14 +63,7 @@ export function criarCondominio({ nome, cnpj, sindico, unidades, cep, logradouro
     contas: [],
     avisos: [],
     assembleias: [],
-    manutencoes: frequenciasManutencao.map((frequencia, index) => ({
-      id: `${slug}-man-${index + 1}`,
-      titulo: `Planejar manutencao ${frequencia.toLowerCase()}`,
-      frequencia,
-      proximaData: '',
-      responsavel: 'Definir fornecedor',
-      status: 'Pendente',
-    })),
+    manutencoes: [],
   }
 }
 

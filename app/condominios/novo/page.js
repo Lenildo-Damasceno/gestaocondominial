@@ -239,8 +239,8 @@ export default function NovoCondominioPage() {
             <h2 className="text-base font-semibold">O que já nasce pronto</h2>
             <ul className="mt-4 space-y-3 text-sm leading-6 text-white/70">
               <li>• Condomínio entra na carteira e aparece no dashboard</li>
-              <li>• Página individual com contas, avisos e manutenções</li>
-              <li>• Manutenções criadas por frequência: diária, mensal, trimestral, semestral e anual</li>
+              <li>• Página individual para cadastrar contas, avisos e manutenções</li>
+              <li>• Manutenções começam vazias para evitar alertas falsos no dashboard</li>
               <li>• CEP preenchido automaticamente via API dos Correios</li>
             </ul>
           </div>

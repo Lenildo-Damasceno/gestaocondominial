@@ -1,15 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import AdminShell from '@/views/components/admin-shell'
 import { formatarData, listarCondominios } from '@/controllers/condominio'
 
 const STATUS_ALERTA = ['Não realizada', 'Pendente', 'Atrasada']
 
 export default function ManutencoesRecorrentesPage() {
-  const [agrupado, setAgrupado] = useState({})
-
-  useEffect(() => {
+  const [agrupado] = useState(() => {
     const todas = listarCondominios().flatMap((c) =>
       c.manutencoes.map((m) => ({ ...m, condominio: c.nome }))
     )
@@ -18,8 +16,8 @@ export default function ManutencoesRecorrentesPage() {
       if (!mapa[m.frequencia]) mapa[m.frequencia] = []
       mapa[m.frequencia].push(m)
     })
-    setAgrupado(mapa)
-  }, [])
+    return mapa
+  })
 
   const statusClass = (status) =>
     STATUS_ALERTA.includes(status)
