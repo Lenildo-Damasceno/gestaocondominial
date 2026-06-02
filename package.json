@@ -1,28 +1,21 @@
 {
-  "_comment": "package.json - Configuração de dependências e scripts npm. SCRIPTS: npm run dev (servidor dev), npm run build (build), npm run start (produção), npm run lint (validação). DEPS: next 16, react 19, supabase 2.105. DEV DEPS: tailwindcss 4, eslint 9",
-  "name": "gestao-condominio",
+  "name": "gestao-condominio-monorepo",
   "version": "0.1.0",
   "private": true,
+  "description": "Monorepo para Gestão de Condomínio com separação Frontend/Backend",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.105.4",
-    "critters": "^0.0.23",
-    "next": "^16.2.6",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "dev": "npm run dev -w frontend",
+    "build": "npm run build -w frontend",
+    "start": "npm start -w frontend",
+    "lint": "npm run lint -w frontend",
+    "dev:all": "concurrently \"npm run dev -w frontend\" \"npm run dev -w backend\"",
+    "install:all": "npm install && npm install -w frontend && npm install -w backend"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.4",
-    "tailwindcss": "^4"
-  },
-  "overrides": {
-    "postcss": "8.5.14"
+    "concurrently": "^8.2.2"
   }
 }
