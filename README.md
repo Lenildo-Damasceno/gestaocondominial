@@ -1,36 +1,122 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Gestão de Condomínio - Monorepo
 
-## Getting Started
+Projeto de gestão de condomínio com arquitetura monorepo separando frontend e backend.
 
-First, run the development server:
+## 🏗️ Estrutura do Projeto
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+gestao-condominio/
+├── frontend/                 # Frontend Next.js + React
+│   ├── app/                 # Páginas e rotas (App Router)
+│   ├── components/          # Componentes React
+│   ├── public/              # Assets estáticos
+│   ├── package.json         # Dependências frontend
+│   ├── next.config.mjs      # Config Next.js
+│   ├── jsconfig.json        # Path aliases
+│   └── postcss.config.mjs   # Tailwind CSS config
+│
+├── backend/                 # Backend (API routes + Controllers)
+│   ├── api/                 # Rotas API Next.js
+│   ├── controllers/         # Lógica de negócio
+│   │   ├── auth.js
+│   │   ├── condominio.js
+│   │   ├── logs.js
+│   │   ├── permissoes.js
+│   │   └── usuarios.js
+│   ├── models/              # Modelos de dados
+│   │   ├── condominio.js
+│   │   └── supabase.js
+│   └── README.md
+│
+├── config/                  # Configurações compartilhadas
+│   ├── eslint.config.mjs    # ESLint config
+│   └── README.md
+│
+├── scripts/                 # Scripts de utilidade
+│   ├── limpar-cache.bat
+│   └── README.md
+│
+├── package.json             # Root (workspaces monorepo)
+├── .gitignore
+└── README.md                # Você está aqui
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🚀 Scripts Disponíveis
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Frontend Only
+```bash
+npm run dev          # Inicia dev server (localhost:3000)
+npm run build        # Build para produção
+npm start            # Inicia em produção
+npm run lint         # Validação ESLint
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Monorepo
+```bash
+npm run dev:all      # Inicia frontend + backend em paralelo
+npm run install:all  # Instala dependências de tudo
+```
 
-## Learn More
+## 📦 Instalação
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+# Instalar dependências de todos os workspaces
+npm run install:all
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Ou manualmente
+cd frontend && npm install
+cd backend && npm install
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 💻 Desenvolvimento
 
-## Deploy on Vercel
+```bash
+# Frontend
+cd frontend
+npm run dev
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+# Em outro terminal, você pode trabalhar no backend
+cd backend
+npm run dev  # (se houver scripts setup)
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📱 Stack Tecnológico
+
+**Frontend:**
+- Next.js 16
+- React 19
+- Tailwind CSS 4
+- Supabase JS
+
+**Backend:**
+- Next.js API Routes (atualmente)
+- Controllers MVC pattern
+- Supabase como BD
+
+## 🔄 Arquitetura MVC
+
+```
+Requisição HTTP
+    ↓
+API Routes (app/api/*) / Controllers
+    ↓
+Models (Supabase queries)
+    ↓
+Resposta JSON
+    ↓
+Frontend Components (renderizam)
+```
+
+## 📝 Notas
+
+- Frontend e Backend são workspaces npm separados
+- Compartilham a mesma configuração de ESLint
+- Podem ser deployados independentemente
+- Backend pode ser migrado para Express/FastAPI no futuro
+
+## 👨‍💻 Próximas Etapas
+
+- [ ] Separar API em backend standalone (Express/Node)
+- [ ] Adicionar testes unitários
+- [ ] Configurar CI/CD
+- [ ] Documentar endpoints API
