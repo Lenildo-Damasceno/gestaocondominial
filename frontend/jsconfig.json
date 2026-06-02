@@ -1,0 +1,16 @@
+/**
+ * jsconfig.json (Frontend)
+ * 
+ * Configuração de paths do JavaScript/TypeScript para frontend
+ * - Define alias '@/*' que aponta para raiz do frontend
+ * - Permite importações limpas: import X from '@/lib/supabase'
+ * - Melhora autocompletar e resolução de módulos no editor
+ */
+
+{
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./*"]
+    }
+  }
+}
